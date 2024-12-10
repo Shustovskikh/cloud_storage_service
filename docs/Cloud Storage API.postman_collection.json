@@ -1,0 +1,560 @@
+{
+	"info": {
+		"_postman_id": "6adb42c9-79d2-452b-8e6f-5aa00dc687fc",
+		"name": "Cloud Storage API",
+		"description": "Test collection for Cloud Storage API.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "31225681"
+	},
+	"item": [
+		{
+			"name": "Register User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"test_user\",\n    \"email\": \"test_user@example.com\",\n    \"password\": \"strong_password\"\n}"
+				},
+				"url": "http://127.0.0.1:8000/api/users/register/"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"pm.environment.set(\"access_token\", jsonData.access);",
+							"pm.environment.set(\"refresh_token\", jsonData.refresh);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "test_user",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "strong_password",
+							"type": "text"
+						}
+					]
+				},
+				"url": "http://127.0.0.1:8000/api/token/"
+			},
+			"response": []
+		},
+		{
+			"name": "Get New Token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Save tokens\", () => {\r",
+							"    const response = pm.response.json();\r",
+							"    pm.collectionVariables.set(\"access_token\", response.access);\r",
+							"    pm.collectionVariables.set(\"refresh_token\", response.refresh);\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const token = pm.collectionVariables.get(\"access_token\");\r",
+							"\r",
+							"if (token) {\r",
+							"    pm.request.headers.add({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${token}`\r",
+							"    });\r",
+							"} else {\r",
+							"    console.warn(\"Access token is missing!\");\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "test_user",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "strong_password",
+							"type": "text"
+						}
+					]
+				},
+				"url": "http://127.0.0.1:8000/api/token/"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Token Refresh",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Update access token\", () => {\r",
+							"    const response = pm.response.json();\r",
+							"    pm.collectionVariables.set(\"access_token\", response.access);\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const token = pm.collectionVariables.get(\"access_token\");\r",
+							"\r",
+							"if (!token) {\r",
+							"    pm.sendRequest({\r",
+							"        url: `{{base_url}}/token/refresh/`,\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.collectionVariables.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, (err, res) => {\r",
+							"        if (!err && res.status === 200) {\r",
+							"            const response = res.json();\r",
+							"            pm.collectionVariables.set(\"access_token\", response.access);\r",
+							"\r",
+							"            pm.request.headers.add({\r",
+							"                key: \"Authorization\",\r",
+							"                value: `Bearer ${response.access}`\r",
+							"            });\r",
+							"        } else {\r",
+							"            console.error(\"Token refresh failed:\", res);\r",
+							"        }\r",
+							"    });\r",
+							"} else {\r",
+							"    pm.request.headers.add({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${token}`\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"refresh\": \"{{refresh_token}}\"\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://127.0.0.1:8000/api/token/refresh/"
+			},
+			"response": []
+		},
+		{
+			"name": "List Files",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"if (pm.environment.get(\"access_token\")) { \r",
+							"    console.log(\"Текущий токен доступа:\", pm.environment.get(\"access_token\"));\r",
+							"\r",
+							"    pm.request.headers.upsert({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${pm.environment.get(\"access_token\")}`\r",
+							"    });\r",
+							"} else {\r",
+							"    pm.sendRequest({\r",
+							"        url: pm.environment.get(\"base_url\") + \"/api/token/refresh/\",\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.environment.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, function (err, res) {\r",
+							"        if (err) {\r",
+							"            console.error(\"Ошибка обновления токена:\", err);\r",
+							"        } else if (res.code === 200) {\r",
+							"            const jsonData = res.json();\r",
+							"            const newAccessToken = jsonData.access;\r",
+							"            pm.environment.set(\"access_token\", newAccessToken);\r",
+							"            console.log(\"Обновлённый access_token:\", newAccessToken);\r",
+							"\r",
+							"            pm.request.headers.add({\r",
+							"                key: \"Authorization\",\r",
+							"                value: `Bearer ${newAccessToken}`\r",
+							"            });\r",
+							"        } else {\r",
+							"            console.error(\"Не удалось обновить токен:\", res.json());\r",
+							"        }\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/files/"
+			},
+			"response": []
+		},
+		{
+			"name": "Upload File",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"if (!pm.environment.get(\"access_token\")) {\r",
+							"    pm.sendRequest({\r",
+							"        url: pm.environment.get(\"base_url\") + \"/api/token/refresh/\",\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.environment.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, function (err, res) {\r",
+							"        if (res.code === 200) {\r",
+							"            const jsonData = res.json();\r",
+							"            pm.environment.set(\"access_token\", jsonData.access);\r",
+							"            console.log(\"Access token обновлен:\", jsonData.access);\r",
+							"        } else {\r",
+							"            console.error(\"Ошибка обновления токена:\", res.json());\r",
+							"        }\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/C:/Users/eshus/Downloads/example.txt"
+						},
+						{
+							"key": "name",
+							"value": "test_file",
+							"type": "text"
+						}
+					]
+				},
+				"url": "http://127.0.0.1:8000/api/files/"
+			},
+			"response": []
+		},
+		{
+			"name": "List Files",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"if (pm.environment.get(\"access_token\")) { \r",
+							"    console.log(\"Текущий токен доступа:\", pm.environment.get(\"access_token\"));\r",
+							"\r",
+							"    pm.request.headers.upsert({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${pm.environment.get(\"access_token\")}`\r",
+							"    });\r",
+							"} else {\r",
+							"    pm.sendRequest({\r",
+							"        url: pm.environment.get(\"base_url\") + \"/api/token/refresh/\",\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.environment.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, function (err, res) {\r",
+							"        if (err) {\r",
+							"            console.error(\"Ошибка обновления токена:\", err);\r",
+							"        } else if (res.code === 200) {\r",
+							"            const jsonData = res.json();\r",
+							"            const newAccessToken = jsonData.access;\r",
+							"            pm.environment.set(\"access_token\", newAccessToken);\r",
+							"            console.log(\"Обновлённый access_token:\", newAccessToken);\r",
+							"\r",
+							"            pm.request.headers.add({\r",
+							"                key: \"Authorization\",\r",
+							"                value: `Bearer ${newAccessToken}`\r",
+							"            });\r",
+							"        } else {\r",
+							"            console.error(\"Не удалось обновить токен:\", res.json());\r",
+							"        }\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/files/"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Link Download",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}",
+						"type": "text"
+					}
+				],
+				"url": "http://localhost:8000/api/files/{{file_id}}/get_shared_link/"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete File",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/files/{{file_id}}/"
+			},
+			"response": []
+		},
+		{
+			"name": "List Files",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"if (pm.environment.get(\"access_token\")) { \r",
+							"    console.log(\"Текущий токен доступа:\", pm.environment.get(\"access_token\"));\r",
+							"\r",
+							"    pm.request.headers.upsert({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${pm.environment.get(\"access_token\")}`\r",
+							"    });\r",
+							"} else {\r",
+							"    pm.sendRequest({\r",
+							"        url: pm.environment.get(\"base_url\") + \"/api/token/refresh/\",\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.environment.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, function (err, res) {\r",
+							"        if (err) {\r",
+							"            console.error(\"Ошибка обновления токена:\", err);\r",
+							"        } else if (res.code === 200) {\r",
+							"            const jsonData = res.json();\r",
+							"            const newAccessToken = jsonData.access;\r",
+							"            pm.environment.set(\"access_token\", newAccessToken);\r",
+							"            console.log(\"Обновлённый access_token:\", newAccessToken);\r",
+							"\r",
+							"            pm.request.headers.add({\r",
+							"                key: \"Authorization\",\r",
+							"                value: `Bearer ${newAccessToken}`\r",
+							"            });\r",
+							"        } else {\r",
+							"            console.error(\"Не удалось обновить токен:\", res.json());\r",
+							"        }\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/files/"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000/api",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

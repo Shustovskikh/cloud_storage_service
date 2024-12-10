@@ -1,60 +1,63 @@
+# Python artifacts
 __pycache__/
 *.py[cod]
 
-
+# Environment variables
 *.env
 *.local
 *.db
 *.sqlite3
+
+# Logs and debug
 *.log
-cloud_storage_service/settings.py
+
+# Local Django settings
 cloud_storage_service/settings.local.py
 
-
+# Virtual environments
 venv/
 ENV/
 env/
 *.venv/
 *.env/
 
-
+# IDE configs
 .vscode/
-
-
 .idea/
 
-
+# OS-specific files
 .DS_Store
-
-
 Thumbs.db
 Desktop.ini
 
-
+# Database files
 *.psql
 
+# Migrations (exclude all except __init__.py)
+*/migrations/[!__init__]*.py
 
-migrations/
-
-
+# Static and media files
 /static/
 media/
 
-
+# Documentation artifacts
 docs/_build/
 
-
+# Cache and test artifacts
 .cache/
 *.cover
-*.log
 *.tox
 *.nox
 *.coverage
 *.hypothesis/
 
-
+# Node.js artifacts
 node_modules/
 bower_components/
 
-
+# Docker (if needed)
 .docker/
+
+# Celery
+celerybeat-schedule
+*.pid
