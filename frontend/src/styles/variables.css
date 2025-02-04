@@ -1,0 +1,22 @@
+:root {
+  --primary-color: #4CAF50;
+  --primary-color-dark: #388E3C;
+  --secondary-color: #FF9800;
+  --text-color: #333;
+  --background-color: #f4f4f9;
+
+  --error-color: #f44336;
+  --error-bg: #ffebee;
+  --success-color: #4caf50;
+  --success-bg: #e8f5e9;
+  --warning-color: #ff9800;
+  --warning-bg: #fff3e0;
+
+  --font-size-small: 12px;
+  --font-size-base: 16px;
+  --font-size-large: 24px;
+
+  --padding-small: 5px;
+  --padding-medium: 10px;
+  --padding-large: 20px;
+}

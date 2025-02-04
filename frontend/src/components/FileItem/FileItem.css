@@ -1,0 +1,124 @@
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.file-item:hover {
+  background-color: #f5f5f5;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.file-item-name {
+  flex-grow: 1;
+  font-size: 16px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 10px;
+  transition: color 0.3s ease;
+}
+
+.file-item-name:hover {
+  color: #0275d8;
+}
+
+.file-item-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.file-item button {
+  padding: 8px 14px;
+  font-size: 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-item button:active {
+  transform: scale(0.95);
+}
+
+.file-item .delete-button {
+  background-color: #d9534f;
+  color: white;
+}
+
+.file-item .delete-button:hover {
+  background-color: #c9302c;
+}
+
+.file-item .download-link-button {
+  background-color: #0275d8;
+  color: white;
+}
+
+.file-item .download-link-button:hover {
+  background-color: #025aa5;
+}
+
+.file-item .copy-link-button {
+  background-color: #0275d8;
+  color: white;
+}
+
+.file-item .copy-link-button:hover {
+  background-color: #025aa5;
+}
+
+.file-item button:disabled {
+  background-color: #ddd;
+  cursor: not-allowed;
+}
+
+.file-item .download-link {
+  font-size: 14px;
+  color: #0275d8;
+  text-decoration: none;
+  margin-top: 5px;
+  display: block;
+}
+
+.file-item .download-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .file-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .file-item-name {
+    font-size: 14px;
+  }
+
+  .file-item-actions {
+    margin-top: 10px;
+    gap: 8px;
+  }
+
+  .file-item button {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .file-item .download-link {
+    font-size: 13px;
+  }
+}

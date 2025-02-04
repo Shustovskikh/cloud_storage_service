@@ -26,7 +26,7 @@
 			"response": []
 		},
 		{
-			"name": "Get Token",
+			"name": "Get Token User",
 			"event": [
 				{
 					"listen": "test",
@@ -59,6 +59,49 @@
 						{
 							"key": "password",
 							"value": "strong_password",
+							"type": "text"
+						}
+					]
+				},
+				"url": "http://127.0.0.1:8000/api/token/"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Token Admin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"pm.environment.set(\"access_token\", jsonData.access);",
+							"pm.environment.set(\"refresh_token\", jsonData.refresh);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "Admin",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "Admin0088!",
 							"type": "text"
 						}
 					]
@@ -283,6 +326,74 @@
 			"response": []
 		},
 		{
+			"name": "List Users",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"if (pm.environment.get(\"access_token\")) { \r",
+							"    console.log(\"Текущий токен доступа:\", pm.environment.get(\"access_token\"));\r",
+							"\r",
+							"    pm.request.headers.upsert({\r",
+							"        key: \"Authorization\",\r",
+							"        value: `Bearer ${pm.environment.get(\"access_token\")}`\r",
+							"    });\r",
+							"} else {\r",
+							"    pm.sendRequest({\r",
+							"        url: pm.environment.get(\"base_url\") + \"/api/token/refresh/\",\r",
+							"        method: \"POST\",\r",
+							"        header: {\r",
+							"            \"Content-Type\": \"application/json\"\r",
+							"        },\r",
+							"        body: {\r",
+							"            mode: \"raw\",\r",
+							"            raw: JSON.stringify({\r",
+							"                refresh: pm.environment.get(\"refresh_token\")\r",
+							"            })\r",
+							"        }\r",
+							"    }, function (err, res) {\r",
+							"        if (err) {\r",
+							"            console.error(\"Ошибка обновления токена:\", err);\r",
+							"        } else if (res.code === 200) {\r",
+							"            const jsonData = res.json();\r",
+							"            const newAccessToken = jsonData.access;\r",
+							"            pm.environment.set(\"access_token\", newAccessToken);\r",
+							"            console.log(\"Обновлённый access_token:\", newAccessToken);\r",
+							"\r",
+							"            pm.request.headers.add({\r",
+							"                key: \"Authorization\",\r",
+							"                value: `Bearer ${newAccessToken}`\r",
+							"            });\r",
+							"        } else {\r",
+							"            console.error(\"Не удалось обновить токен:\", res.json());\r",
+							"        }\r",
+							"    });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/users/"
+			},
+			"response": []
+		},
+		{
 			"name": "Upload File",
 			"event": [
 				{
@@ -434,6 +545,34 @@
 			"response": []
 		},
 		{
+			"name": "Change File's Name",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "name",
+							"value": "new_file_name.pdf",
+							"type": "text"
+						}
+					]
+				},
+				"url": "http://127.0.0.1:8000/api/files/{{file_id}}/update/"
+			},
+			"response": []
+		},
+		{
 			"name": "Delete File",
 			"request": {
 				"auth": {
@@ -516,6 +655,24 @@
 					}
 				],
 				"url": "http://127.0.0.1:8000/api/files/"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete User",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": {}
+				},
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{access_token}}"
+					}
+				],
+				"url": "http://127.0.0.1:8000/api/files/{{file_id}}/"
 			},
 			"response": []
 		}

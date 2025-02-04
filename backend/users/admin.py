@@ -16,5 +16,4 @@ class CustomUserAdmin(UserAdmin):
         return File.objects.filter(user=obj).count()
     get_files_count.short_description = 'Files Count'
 
-# Registering the user's model with changes
 admin.site.register(CustomUser, CustomUserAdmin)

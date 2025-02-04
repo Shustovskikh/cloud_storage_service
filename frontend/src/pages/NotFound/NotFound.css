@@ -1,0 +1,15 @@
+.not-found-container {
+  text-align: center;
+  margin-top: var(--padding-extra-large);
+  color: var(--text-color);
+}
+
+.not-found-container h1 {
+  font-size: var(--font-size-extra-large);
+  color: var(--error-color);
+}
+
+.not-found-container p {
+  font-size: var(--font-size-base);
+  margin-top: var(--padding-medium);
+}

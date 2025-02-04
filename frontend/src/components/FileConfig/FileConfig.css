@@ -1,0 +1,99 @@
+.file-config {
+  width: 400px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: absolute;
+  top: 300px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+
+.file-config .close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.file-config h2 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.file-config .form-group {
+  margin-bottom: 15px;
+}
+
+.file-config .form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.file-config .form-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.file-config .form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.file-config .save-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.file-config .save-button:hover {
+  background-color: #0056b3;
+}
+
+.file-config .cancel-button {
+  background-color: #ff4d4d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.file-config .cancel-button:hover {
+  background-color: #ff0000;
+}
+
+.file-config .success-message {
+  color: green;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.file-config .error-message {
+  color: red;
+  text-align: center;
+  margin-bottom: 20px;
+}
