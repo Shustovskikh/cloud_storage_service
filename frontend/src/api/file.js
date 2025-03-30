@@ -29,9 +29,7 @@ axiosInstance.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post(`${API_URL}/token/refresh/`, {
-          refresh: refreshToken,
-        });
+        const { data } = await axios.post(`${API_URL}/token/refresh/`, { refresh: refreshToken });
         const { access } = data;
         setToken(access, refreshToken);
 
@@ -46,10 +44,11 @@ axiosInstance.interceptors.response.use(
   }
 );
 
-export const uploadFile = async (file, name) => {
+export const uploadFile = async (file, name, comment = 'No comment') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('name', name || file.name);
+  formData.append('comment', comment);
 
   try {
     const response = await axiosInstance.post('/files/', formData, {
@@ -58,10 +57,7 @@ export const uploadFile = async (file, name) => {
     return { success: true, data: response.data };
   } catch (error) {
     console.error('File upload error:', error);
-    return {
-      success: false,
-      message: error.response?.data?.detail || 'File upload failed',
-    };
+    return { success: false, message: error.response?.data?.detail || 'File upload failed' };
   }
 };
 
@@ -139,17 +135,34 @@ export const deleteUser = async (userId) => {
   }
 };
 
-export const updateFile = async (fileId, fileData) => {
+export const updateFile = async (fileId, name, comment) => {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('comment', comment);
+
   try {
-    const response = await axiosInstance.put(`/files/${fileId}/update/`, fileData, {
-      headers: { 'Content-Type': 'application/json' },
+    const response = await axiosInstance.put(`/files/${fileId}/update/`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
+
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Update file error:', error);
-    return {
-      success: false,
-      message: error.response?.data?.detail || 'Failed to update file',
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || error.response?.data || 'Failed to update file' 
     };
+  }
+};
+
+export const fetchFile = async (fileId) => {
+  try {
+    const response = await axiosInstance.get(`/files/${fileId}/`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('Fetch file error:', error);
+    return { success: false, message: error.response?.data?.detail || 'Failed to fetch file data' };
   }
 };

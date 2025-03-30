@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import UserTable from '../UserTable/UserTable';
 import { fetchAllUsers, deleteUser } from '../../api/user';
+import { toast } from 'react-toastify';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   const loadUsers = async () => {
     setLoading(true);
-    setError(null);
     const result = await fetchAllUsers();
     if (result.success) {
       setUsers(result.data);
     } else {
-      setError(result.message);
+      toast.error(result.message || 'Failed to load users', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
     }
     setLoading(false);
   };
@@ -24,12 +26,22 @@ const UserManagement = () => {
       const result = await deleteUser(userId);
       if (result.success) {
         setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userId));
+        toast.success('User deleted successfully', {
+          autoClose: 2000,
+          hideProgressBar: true,
+        });
       } else {
-        alert('Failed to delete user');
+        toast.error(result.message || 'Failed to delete user', {
+          autoClose: 3000,
+          hideProgressBar: true,
+        });
       }
     } catch (error) {
+      toast.error('Error occurred while deleting user', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
       console.error(error);
-      alert('Error occurred while deleting user.');
     }
   };
 
@@ -40,12 +52,7 @@ const UserManagement = () => {
   return (
     <div>
       <h1>User Management</h1>
-      {error && <div style={{ color: 'red' }}>{error}</div>}
-      {loading ? (
-        <p>Loading users...</p>
-      ) : (
-        <UserTable users={users} onDeleteUser={handleDeleteUser} />
-      )}
+      {loading ? <p>Loading users...</p> : <UserTable users={users} onDeleteUser={handleDeleteUser} />}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { updateUser } from '../../api/user';
+import { toast } from 'react-toastify';
 import './UserConfig.css';
 
 const UserConfig = ({ userId, onClose, onUserChange }) => {
@@ -9,8 +10,6 @@ const UserConfig = ({ userId, onClose, onUserChange }) => {
     password: '',
     confirmPassword: '',
   });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     // Uploading current user data
@@ -26,78 +25,89 @@ const UserConfig = ({ userId, onClose, onUserChange }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (user.password !== user.confirmPassword) {
-      setError('Passwords do not match');
+      toast.error('Passwords do not match', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
       return;
     }
     try {
       const response = await updateUser(userId, user);
       if (response.success) {
-        setSuccess('User updated successfully!');
-        setError('');
+        toast.success('User updated successfully!', {
+          autoClose: 2000,
+          hideProgressBar: true,
+        });
         onUserChange();
         onClose();
       } else {
-        setError(response.message || 'Failed to update user');
+        toast.error(response.message || 'Failed to update user', {
+          autoClose: 3000,
+          hideProgressBar: true,
+        });
       }
     } catch (err) {
-      setError('An error occurred while updating the user.');
+      toast.error('An error occurred while updating the user', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
     }
   };
 
   return (
-    <div className="user-config">
-      <button className="close-button" onClick={onClose}>
-        &times;
-      </button>
-      <h2>Configure User</h2>
-      {success && <p className="success-message">{success}</p>}
-      {error && <p className="error-message">{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Username</label>
-          <input
-            type="text"
-            name="username"
-            value={user.username}
-            onChange={handleChange}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Email</label>
-          <input
-            type="email"
-            name="email"
-            value={user.email}
-            onChange={handleChange}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Password</label>
-          <input
-            type="password"
-            name="password"
-            value={user.password}
-            onChange={handleChange}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Confirm Password</label>
-          <input
-            type="password"
-            name="confirmPassword"
-            value={user.confirmPassword}
-            onChange={handleChange}
-            required
-          />
-        </div>
-        <div className="form-actions">
-          <button type="submit" className="save-button">Save Changes</button>
-          <button type="button" className="cancel-button" onClick={onClose}>Cancel</button>
-        </div>
-      </form>
+    <div className="user-config-overlay">
+      <div className="user-config-content">
+        <button className="close-button" onClick={onClose}>
+          &times;
+        </button>
+        <h2>Configure User</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Username</label>
+            <input
+              type="text"
+              name="username"
+              value={user.username}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              name="email"
+              value={user.email}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              name="password"
+              value={user.password}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Confirm Password</label>
+            <input
+              type="password"
+              name="confirmPassword"
+              value={user.confirmPassword}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="save-button">Save Changes</button>
+            <button type="button" className="cancel-button" onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

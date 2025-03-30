@@ -22,6 +22,10 @@ def default_auto_deleted_at():
     return now() + timedelta(days=30)
 
 class File(models.Model):
+    """
+    Model representing uploaded files with metadata.
+    Includes tracking for last download time.
+    """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="files"
     )
@@ -31,10 +35,18 @@ class File(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     auto_deleted_at = models.DateTimeField(default=default_auto_deleted_at)
     shared_link = models.CharField(max_length=36, blank=True, null=True, unique=True)
+    comment = models.TextField(null=True, blank=True)
+    last_downloaded = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Last Downloaded",
+        help_text="Date and time when the file was last downloaded"
+    )
 
     def save(self, *args, **kwargs):
         """
-        Redefining the save method to set the file size and unique shared_link
+        Redefining the save method to set the file size and unique shared_link.
+        Automatically calculates size if not set and generates shared_link if missing.
         """
         if self.file and not self.size:
             try:
@@ -47,28 +59,30 @@ class File(models.Model):
 
     def get_shared_url(self):
         """
-        Generates a relative URL for downloading a file by `shared_link`
+        Generates a relative URL for downloading a file by `shared_link`.
+        Used for creating shareable download links.
         """
         from django.urls import reverse
         return reverse('file-download', kwargs={'shared_link': self.shared_link})
 
     def __str__(self):
+        """String representation of the file for admin interface and debugging."""
         return f"{self.name} ({self.user.username})"
 
-# A signal to delete a file from disk after deleting a model object
 @receiver(post_delete, sender=File)
 def delete_file_on_model_delete(sender, instance, **kwargs):
     """
-    Deletes a file from disk after deleting a model object
+    Signal receiver to delete physical file from storage when model instance is deleted.
+    Prevents orphaned files in storage when database records are removed.
     """
     if instance.file and os.path.isfile(instance.file.path):
         os.remove(instance.file.path)
 
-# A signal to delete a user's folder when deleting a user
 @receiver(pre_delete, sender=settings.AUTH_USER_MODEL)
 def delete_user_directory(sender, instance, **kwargs):
     """
-    Deletes a user's folder when deleting a user
+    Signal receiver to delete user's upload directory when user is deleted.
+    Recursively removes all files and subdirectories in the user's upload folder.
     """
     user_folder = os.path.join(settings.MEDIA_ROOT, "uploads", instance.username)
     if os.path.isdir(user_folder):

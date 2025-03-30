@@ -42,6 +42,14 @@ This project is licensed under the ISC License. Feel free to use, modify, and di
 
 ## Project Structure
 
+### General structure
+cloud_storage_service/
+├──backend/
+├──docs/
+├──frontend/
+├──.gitignore
+├──README.md
+
 ### Backend
 
 backend/
@@ -81,6 +89,7 @@ backend/
 ### Frontend
 
 frontend/
+├── node_modules/
 ├── public/
 │   ├── index.html
 │   └── favicon.ico
@@ -91,10 +100,14 @@ frontend/
 │   │   ├── user.js
 │   │   └── index.js
 │   ├── components/
+│   │   ├── ConfirmationModal/
+│   │   │   ├── ConfirmationModal.jsx
+│   │   │   ├── ConfirmationModal.css
 │   │   ├── Header/
 │   │   │   ├── Header.jsx
 │   │   │   ├── Header.css
 │   │   ├── FileList/
+│   │   │   ├── AllUserFiles.js
 │   │   │   ├── FileList.jsx
 │   │   │   ├── FileList.css
 │   │   ├── FileUploader/
@@ -111,6 +124,12 @@ frontend/
 │   │   │   ├── UserConfig.css
 │   │   ├── UserManagement/
 │   │   │   ├── UserManagement.jsx
+│   │   ├── Footer/
+│   │   │   ├──Footer.css
+│   │   │   ├──Footer.jsx
+│   │   ├── FileConfig
+│   │   │   ├── FileConfig.css
+│   │   │   ├── FileConfig.jsx
 │   ├── pages/
 │   │   ├── Home/
 │   │   │   ├── Home.jsx
@@ -142,10 +161,8 @@ frontend/
 │   └── utils/
 │       └── helpers.js
 ├── .env
-├── .babelrc
 ├── package.json
 ├── package-lock.json
-├── webpack.config.js
 
 ## Installation
 
@@ -228,6 +245,11 @@ frontend/
     ```
 
 3. Create a `.env` file in the root directory and add the following environment variables:
+    ```bash
+    nano .env
+    ```
+
+    Add to it:
     ```
     REACT_APP_API_URL=http://127.0.0.1:8000/api
     REACT_APP_WEBSOCKET_URL=ws://127.0.0.1:8000/ws/files/
@@ -257,35 +279,30 @@ frontend/
 
 ### Frontend
 
-1. Build the application for production:
-    ```bash
-    npm run build
-    ```
-
-2. The build files will be stored in the `dist` directory.
+The frontend runs without a separate build step. All static files are served from **`public/`**, and Webpack processes them dynamically at runtime.
 
 ## API Endpoints
 
 ### Authentication
 
-- `POST /api/users/register/`: Register a new user
-- `POST /api/token/`: Obtain JWT tokens
-- `POST /api/token/refresh/`: Refresh JWT token
+- `POST /api/users/register/` — Register a new user  
+- `POST /api/token/` — Obtain JWT tokens  
+- `POST /api/token/refresh/` — Refresh JWT token  
 
 ### User Management
 
-- `GET /api/users/`: Get all users (admin only)
-- `DELETE /api/users/{userId}/`: Delete a user (admin only)
-- `GET /api/users/{userId}/`: Get user info (admin only)
-- `PUT /api/users/{userId}/`: Update user info (admin only)
+- `GET /api/users/` — Get a list of all users (admin only)  
+- `DELETE /api/users/{userId}/` — Delete a user (admin only)  
+- `GET /api/users/{userId}/` — Get user details (admin only)  
+- `PUT /api/users/{userId}/` — Update user details (admin only)  
 
 ### File Management
 
-- `GET /api/files/`: Get list of files
-- `POST /api/files/`: Upload a file
-- `DELETE /api/files/{fileId}/`: Delete a file
-- `PUT /api/files/{fileId}/update/`: Update file info
-- `GET /api/files/{fileId}/get_shared_link/`: Get shared link for a file
+- `GET /api/files/` — Retrieve a list of files  
+- `POST /api/files/` — Upload a file  
+- `DELETE /api/files/{fileId}/` — Delete a file  
+- `PUT /api/files/{fileId}/update/` — Update file details  
+- `GET /api/files/{fileId}/get_shared_link/` — Get a shared link for a file  
 
 ## Contributing
 
@@ -435,124 +452,136 @@ sudo systemctl status daphne
 
 ---
 
-# NGINX Configuration
-
-## SSL Certificate (Self-Signed Example)
-
-```bash
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/selfsigned.key -out /etc/ssl/certs/selfsigned.crt
-```
-
 ## NGINX Configuration
+
+To ensure proper routing of requests to the backend and serving of static files, configure Nginx as follows.
+
+### Step 1: Create Nginx Configuration File
+
+Open or create the configuration file for your project:
 
 ```bash
 sudo nano /etc/nginx/sites-available/cloud_storage_service
 ```
 
-(add the configuration as in the original notes)
+### Step 2: Add the Configuration
 
-Activate the config:
+Copy and paste the following configuration into the file:
+
+```nginx
+server {
+    listen 80;
+    server_name <YOUR_SERVER_IP>;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name <YOUR_SERVER_IP>;
+
+    ssl_certificate /etc/ssl/certs/selfsigned.crt;
+    ssl_certificate_key /etc/ssl/private/selfsigned.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # ======= Frontend Configuration =======
+    root /home/evgen/cloud_storage_service/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(?:js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|otf|eot|woff)$ {
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # ======= API Backend Configuration =======
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /static/ {
+        alias /home/evgen/cloud_storage_service/backend/staticfiles/;
+        autoindex on;
+        expires 30d;
+        add_header Cache-Control "public";
+    }
+
+    location /media/ {
+        alias /home/evgen/cloud_storage_service/backend/media/;
+    }
+
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # ======= Logging =======
+    access_log /var/log/nginx/frontend_access.log;
+    error_log /var/log/nginx/frontend_error.log;
+
+    # Custom 404 Page
+    error_page 404 /404.html;
+    location = /404.html {
+        root /usr/share/nginx/html;
+    }
+}
+```
+
+### Step 3: Enable the Configuration
+
+Create a symbolic link to enable the configuration:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/cloud_storage_service /etc/nginx/sites-enabled/
+```
+
+### Step 4: Verify and Restart Nginx
+
+Check if the configuration is correct:
+
+```bash
 sudo nginx -t
+```
+
+If there are no errors, restart Nginx:
+
+```bash
 sudo systemctl restart nginx
 ```
 
----
+### Step 5: Check Nginx Status
 
-# Frontend Configuration
-
-```bash
-cd ../frontend
-sudo npm install
-npm run build
-```
-
-Creating a service for auto-start:
+To verify that Nginx is running properly, use:
 
 ```bash
-sudo nano /etc/systemd/system/frontend.service
-```
-
-(add the configuration for systemd)
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl start frontend
-sudo systemctl enable frontend
-```
-
----
-
-# Setting Up Celery and Redis
-
-## Celery Worker
-
-```bash
-sudo nano /etc/systemd/system/celery.service
-```
-
-(add the configuration)
-
-```bash
-sudo systemctl enable celery
-sudo systemctl start celery
-```
-
-## Celery Beat
-
-```bash
-sudo nano /etc/systemd/system/celery-beat.service
-```
-
-(add the configuration)
-
-```bash
-sudo systemctl enable celery-beat
-sudo systemctl start celery-beat
-```
-
-## Redis
-
-```bash
-sudo systemctl start redis
-sudo systemctl enable redis
-redis-cli ping  # Should respond with "PONG"
-```
-
----
-
-# Checking Service Status
-
-```bash
-sudo systemctl status daphne
-sudo systemctl status frontend
-sudo systemctl status celery
-sudo systemctl status celery-beat
-sudo systemctl status redis
-sudo systemctl status postgresql
 sudo systemctl status nginx
 ```
 
----
+### Step 6: Test the Setup
 
-# Useful Commands
-
-- Restarting a service:
+Ensure Nginx is serving requests correctly:
 
 ```bash
-sudo systemctl restart <service_name>
+curl -Ik https://<IP-address>
 ```
 
-- Viewing logs:
-
-```bash
-journalctl -u <service_name> -f
-```
-
-- Checking availability:
-
-```bash
-curl -Ik https://<IP-адрес>
-```
+This should return a valid HTTP response confirming that Nginx is working properly.

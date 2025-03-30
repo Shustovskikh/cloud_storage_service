@@ -4,54 +4,48 @@ import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff, FiX } from 'react-icons/fi';
 import { login as loginAction } from '../../authSlice';
 import { login } from '../../api/auth';
+import { toast } from 'react-toastify';
 import './Login.css';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const validate = () => {
-    if (!username || username.length < 4) {
-      setError('Username must be at least 4 characters long.');
-      return false;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return false;
-    }
-    return true;
-  };
-
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError('');
+    setIsSubmitting(true);
+    try {
+      const data = await login(username, password);
 
-    if (validate()) {
-      setIsSubmitting(true);
-      try {
-        const data = await login(username, password);
-
-        if (data.access && data.refresh) {
-          dispatch(
-            loginAction({
-              user: { is_staff: data.is_staff },
-              tokens: { access: data.access, refresh: data.refresh },
-            })
-          );
-          navigate(data.is_staff ? '/admin' : '/dashboard');
-        } else {
-          setError('Invalid server response.');
-        }
-      } catch (err) {
-        setError(err.response?.data?.detail || 'Login failed.');
-      } finally {
-        setIsSubmitting(false);
+      if (data.access && data.refresh) {
+        dispatch(
+          loginAction({
+            user: { is_staff: data.is_staff },
+            tokens: { access: data.access, refresh: data.refresh },
+          })
+        );
+        toast.success('Login successful! Redirecting...', {
+          autoClose: 1500,
+          hideProgressBar: true,
+        });
+        setTimeout(() => navigate(data.is_staff ? '/admin' : '/dashboard'), 1500);
+      } else {
+        toast.error('Invalid server response.', {
+          autoClose: 3000,
+          hideProgressBar: true,
+        });
       }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Login failed.', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -71,11 +65,7 @@ const Login = () => {
               disabled={isSubmitting}
             />
             {username && (
-              <span
-                className="clearButton"
-                onClick={() => setUsername('')}
-                aria-label="Clear username"
-              >
+              <span className="clearButton" onClick={() => setUsername('')} aria-label="Clear username">
                 <FiX />
               </span>
             )}
@@ -92,23 +82,14 @@ const Login = () => {
               autoComplete="current-password"
               disabled={isSubmitting}
             />
-            <span
-              className="togglePasswordButton"
-              onClick={() => setShowPassword((prev) => !prev)}
-              aria-label="Toggle password visibility"
-            >
+            <span className="togglePasswordButton" onClick={() => setShowPassword((prev) => !prev)} aria-label="Toggle password visibility">
               {showPassword ? <FiEyeOff /> : <FiEye />}
             </span>
           </div>
         </div>
-        <button
-          type="submit"
-          className="submitButton"
-          disabled={isSubmitting}
-        >
+        <button type="submit" className="submitButton" disabled={isSubmitting}>
           {isSubmitting ? 'Logging in...' : 'Login'}
         </button>
-        {error && <div className="error">{error}</div>}
       </form>
     </div>
   );

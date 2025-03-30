@@ -1,32 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { fetchAllUsers, deleteUser } from '../../api/user';
-import { listFiles, getDownloadLink, deleteFile, updateFile } from '../../api/file';
+import { listFiles, getDownloadLink, deleteFile } from '../../api/file';
 import UserTable from '../../components/UserTable/UserTable';
 import AllUserFiles from '../../components/FileList/AllUserFiles';
 import UserConfig from '../../components/UserConfig/UserConfig';
+import { toast } from 'react-toastify';
 import './AdminPanel.css';
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(false);
   const [configUser, setConfigUser] = useState(null);
 
   const handleError = (err) => {
+    let errorMessage = 'An unexpected error occurred.';
+    
     if (err?.detail) {
-      setError(err.detail);
+      errorMessage = err.detail;
     } else if (typeof err === 'string') {
-      setError(err);
-    } else {
-      setError('An unexpected error occurred.');
+      errorMessage = err;
     }
+
+    toast.error(errorMessage, {
+      autoClose: 5000,
+      hideProgressBar: true,
+    });
   };
 
   const loadUsers = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       const response = await fetchAllUsers();
@@ -43,14 +47,27 @@ const AdminPanel = () => {
   };
 
   const loadFiles = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       const response = await listFiles();
       if (response.success) {
-        const filesWithUsernames = response.data.map(file => {
+        const sortedFiles = response.data.sort((a, b) => 
+          new Date(b.last_downloaded || 0) - new Date(a.last_downloaded || 0)
+        );
+        
+        const filesWithUsernames = sortedFiles.map(file => {
           const user = users.find(user => user.id === file.user);
-          return { ...file, username: user ? user.username : 'Unknown' };
+          return { 
+            ...file, 
+            username: user ? user.username : 'Unknown',
+            formatted_uploaded_at: new Date(file.uploaded_at).toLocaleString(),
+            formatted_last_downloaded: file.last_downloaded 
+              ? new Date(file.last_downloaded).toLocaleString() 
+              : 'Never'
+          };
         });
+        
         setFiles(filesWithUsernames);
       } else {
         handleError(response.message || 'Failed to load files');
@@ -63,42 +80,72 @@ const AdminPanel = () => {
   };
 
   useEffect(() => {
-    loadUsers();
-  }, [refresh]);
+    const interval = setInterval(() => {
+      if (activeTab === 'users') {
+        loadUsers();
+      } else {
+        loadFiles();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'files') {
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'files' && users.length > 0) {
       loadFiles();
     }
-  }, [activeTab, users, refresh]);
-
-  const handleSelectUser = async (userId) => {
-    setSelectedUser(userId);
-    try {
-      const response = await listFiles();
-      if (response.success) {
-        const userFiles = response.data.filter((file) => file.user === userId);
-        setFiles(userFiles);
-      } else {
-        handleError(response.message || 'Failed to load files');
-      }
-    } catch (error) {
-      handleError('An error occurred while loading files.');
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, users]);
 
   const handleDeleteUser = async (userId) => {
     try {
       const response = await deleteUser(userId);
       if (response.success) {
-        setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userId));
-        setFiles((prevFiles) => prevFiles.filter((file) => file.user !== userId));
-        setRefresh((prev) => !prev);
+        await loadUsers();
+        if (activeTab === 'files') {
+          await loadFiles();
+        }
       } else {
         handleError(response.message || 'Failed to delete user');
       }
     } catch (error) {
       handleError('An error occurred while deleting user.');
+    }
+  };
+
+  const handleDeleteFile = async (fileId) => {
+    try {
+      const response = await deleteFile(fileId);
+      if (response.success) {
+        await loadFiles();
+      } else {
+        handleError(response.message || 'Failed to delete file');
+      }
+    } catch (error) {
+      handleError('An error occurred while deleting file.');
+    }
+  };
+
+  const handleGetDownloadLink = async (fileId) => {
+    try {
+      const response = await getDownloadLink(fileId);
+      if (response.success) {
+        setTimeout(loadFiles, 1000);
+        return response;
+      } else {
+        handleError(response.message || 'Failed to get download link');
+        return null;
+      }
+    } catch (error) {
+      handleError('An error occurred while getting download link.');
+      return null;
     }
   };
 
@@ -110,13 +157,15 @@ const AdminPanel = () => {
     setConfigUser(null);
   };
 
-  const handleUserChange = () => {
-    setRefresh((prev) => !prev);
-    loadUsers();
+  const handleUserUpdated = async () => {
+    await loadUsers();
+    if (activeTab === 'files') {
+      await loadFiles();
+    }
   };
 
-  const handleFileChange = () => {
-    setRefresh((prev) => !prev);
+  const handleFilesUpdated = async () => {
+    await loadFiles();
   };
 
   return (
@@ -138,30 +187,31 @@ const AdminPanel = () => {
       </div>
 
       <div className="tab-content">
-        {error && <div className="error">{error}</div>}
         {loading ? (
-          <div>Loading...</div>
+          <div className="loading-indicator">Loading...</div>
         ) : activeTab === 'users' ? (
           <UserTable
-            key={refresh}
             users={users}
             onDeleteUser={handleDeleteUser}
             onConfigUser={handleConfigUser}
-            onUserChange={handleUserChange}
+            onUserChange={handleUserUpdated}
           />
         ) : (
           <AllUserFiles
-            key={refresh}
             files={files}
-            onDeleteFile={deleteFile}
-            onGetDownloadLink={getDownloadLink}
-            onFileChange={handleFileChange}
+            onDeleteFile={handleDeleteFile}
+            onGetDownloadLink={handleGetDownloadLink}
+            onFileChange={handleFilesUpdated}
           />
         )}
       </div>
 
       {configUser && (
-        <UserConfig userId={configUser} onClose={handleCloseConfig} onUserChange={handleUserChange} />
+        <UserConfig 
+          userId={configUser} 
+          onClose={handleCloseConfig} 
+          onUserChange={handleUserUpdated} 
+        />
       )}
     </div>
   );

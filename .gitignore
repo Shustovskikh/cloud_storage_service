@@ -1,15 +1,19 @@
 # Python artifacts
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 
 # Environment variables
-*.env
-*.local
-*.db
-*.sqlite3
+backend/.env
+backend/*.local
+backend/*.db
+backend/*.sqlite3
+!backend/.env.example
 
 # Logs and debug
 *.log
+*.pot
 
 # Local Django settings
 cloud_storage_service/settings.local.py
@@ -24,6 +28,8 @@ env/
 # IDE configs
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS-specific files
 .DS_Store
@@ -32,13 +38,20 @@ Desktop.ini
 
 # Database files
 *.psql
+*.sqlite
+*.rdb
+*.dump
+
+# Redis
+dump.rdb
 
 # Migrations (exclude all except __init__.py)
 */migrations/[!__init__]*.py
 
 # Static and media files
 /static/
-media/
+/media/
+!media/uploads/  # если нужно сохранить пустую папку uploads
 
 # Documentation artifacts
 docs/_build/
@@ -50,14 +63,32 @@ docs/_build/
 *.nox
 *.coverage
 *.hypothesis/
+.pytest_cache/
+.mypy_cache/
 
 # Node.js artifacts
 node_modules/
 bower_components/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
 
-# Docker (if needed)
-.docker/
+# Frontend build
+frontend/dist/
+frontend/.env.local
+frontend/.env.development
+frontend/.env.test
+
+# Allow frontend .env (explicitly)
+!frontend/.env
 
 # Celery
 celerybeat-schedule
 *.pid
+
+# Project specific
+dump.rdb
+*.bak
+*.tmp

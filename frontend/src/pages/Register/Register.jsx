@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { register } from '../../api/auth';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff, FiX } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import './Register.css';
 
 const Register = () => {
@@ -11,14 +12,13 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const usernameRegex = /^[a-zA-Z0-9]{4,20}$/;
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*.,\-])[A-Za-z\d!@#$%^&*.,\-]{6,}$/;
+  const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*.,-])[A-Za-z\d!@#$%^&*.,-]{6,}$/;
 
   const validate = () => {
     const errors = {};
@@ -40,20 +40,30 @@ const Register = () => {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    setError('');
     setValidationErrors({});
     if (validate()) {
       setIsSubmitting(true);
       try {
         const { success, message } = await register({ email, username, password });
         if (success) {
-          alert('Registration successful! Redirecting to login page.');
-          navigate('/login');
+          toast.success('Registration successful! Redirecting to login page.', {
+            autoClose: 3000,
+            hideProgressBar: true,
+          });
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
         } else {
-          setError(message || 'Registration failed. Please try again.');
+          toast.error(message || 'Registration failed. Please try again.', {
+            autoClose: 3000,
+            hideProgressBar: true,
+          });
         }
       } catch (err) {
-        setError('An error occurred. Please try again later.');
+        toast.error('An error occurred. Please try again later.', {
+          autoClose: 3000,
+          hideProgressBar: true,
+        });
       } finally {
         setIsSubmitting(false);
       }
@@ -155,7 +165,6 @@ const Register = () => {
           {isSubmitting ? 'Registering...' : 'Register'}
         </button>
       </form>
-      {error && <div className="error">{error}</div>}
     </div>
   );
 };

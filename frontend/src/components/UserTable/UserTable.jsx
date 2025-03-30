@@ -1,16 +1,38 @@
 import React, { useState } from 'react';
 import './UserTable.css';
+import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
+import PropTypes from 'prop-types';
+import { toast } from 'react-toastify';
 
-const UserTable = ({ users, onDeleteUser, onConfigUser, onUserChange }) => {
+const UserTable = ({ users = [], onDeleteUser, onConfigUser, onUserChange = () => {} }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+  const handleDeleteClick = (userId) => {
+    setSelectedUserId(userId);
+    setIsModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsProcessing(true);
     try {
-      await onDeleteUser(userId);
-      onUserChange();
+      await onDeleteUser(selectedUserId);
+      await onUserChange();
+      toast.success('User deleted successfully', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
     } catch (err) {
+      toast.error('Error deleting user', {
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
       console.error('Error deleting user:', err);
+    } finally {
+      setIsProcessing(false);
+      setIsModalOpen(false);
     }
   };
 
@@ -33,13 +55,16 @@ const UserTable = ({ users, onDeleteUser, onConfigUser, onUserChange }) => {
         onChange={(e) => setSearchTerm(e.target.value)}
         className="search-input"
       />
+      
+      {isProcessing && <div className="loading-overlay">Processing...</div>}
+      
       <table>
         <thead>
           <tr>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Actions</th>
+            <th style={{width: '25%'}}>Username</th>
+            <th style={{width: '35%'}}>Email</th>
+            <th style={{width: '20%'}}>Role</th>
+            <th style={{width: '20%'}}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -54,26 +79,50 @@ const UserTable = ({ users, onDeleteUser, onConfigUser, onUserChange }) => {
                 <td>{user.email}</td>
                 <td>{user.is_superuser ? 'Superuser' : user.is_staff ? 'Admin' : 'User'}</td>
                 <td>
-                  <button
-                    onClick={() => handleConfig(user.id)}
-                    className="config-button"
-                  >
-                    Config
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    className="delete-button"
-                  >
-                    Delete
-                  </button>
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+                    <button
+                      onClick={() => handleConfig(user.id)}
+                      className="action-button config-button"
+                      disabled={isProcessing}
+                    >
+                      Config
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(user.id)}
+                      className="action-button delete-button"
+                      disabled={isProcessing}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))
           )}
         </tbody>
       </table>
+
+      <ConfirmationModal
+        isOpen={isModalOpen}
+        onClose={() => !isProcessing && setIsModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Confirm Deletion"
+        message="Are you sure you want to delete this user?"
+        isProcessing={isProcessing}
+      />
     </div>
   );
+};
+
+UserTable.propTypes = {
+  users: PropTypes.array,
+  onDeleteUser: PropTypes.func.isRequired,
+  onConfigUser: PropTypes.func.isRequired,
+  onUserChange: PropTypes.func
+};
+
+UserTable.defaultProps = {
+  users: []
 };
 
 export default UserTable;
