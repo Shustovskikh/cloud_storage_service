@@ -1,86 +1,187 @@
+from django.contrib.auth import login, logout, update_session_auth_hash
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.authentication import SessionAuthentication
 from .models import CustomUser
-from .serializers import UserSerializer, CustomTokenObtainPairSerializer
+from .serializers import (
+    UserSerializer,
+    UserLoginSerializer,
+    UserProfileSerializer,
+    PasswordChangeSerializer
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
-class CustomTokenObtainPairView(TokenObtainPairView):
+class UserLoginView(APIView):
     """
-    Custom token view to use the modified serializer.
-    This view will return the standard access and refresh tokens, 
-    but will also include additional user information, such as 'is_staff'.
+    Handle user login using email and password via session auth.
     """
-    serializer_class = CustomTokenObtainPairSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
 
+    def post(self, request, *args, **kwargs):
+        serializer = UserLoginSerializer(data=request.data, context={'request': request})
 
-class UserViewSet(ModelViewSet):
-    """
-    ViewSet for managing users.
-    Regular users can only see themselves, and administrators can see all users.
-    """
-    queryset = CustomUser.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            login(request, user)
 
-    def get_queryset(self):
-        """
-        Ensure fresh data is retrieved each time.
-        Regular users can only see themselves, administrators can see everyone.
-        """
-        user = self.request.user
-        if user.is_staff:
-            users = CustomUser.objects.all()
-        else:
-            users = CustomUser.objects.filter(id=user.id)
-        logger.debug(f"Fetched users: {users}")
-        return users
+            response_data = {
+                'status': 'success',
+                'user_id': user.id,
+                'is_staff': user.is_staff
+            }
 
-    def finalize_response(self, request, response, *args, **kwargs):
-        """
-        Add no-cache headers to the response to prevent caching.
-        """
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            return self._prepare_response(response_data, status=status.HTTP_200_OK)
+
+        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _prepare_response(self, data, status):
+        response = Response(data, status=status)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'
-        return super().finalize_response(request, response, *args, **kwargs)
+        return response
 
-    def perform_destroy(self, instance):
-        """
-        Override to ensure cache is cleared after user deletion.
-        """
-        super().perform_destroy(instance)
-        from django.core.cache import cache
-        cache.clear()
+
+class UserLogoutView(APIView):
+    """
+    Handle session logout.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request, *args, **kwargs):
+        logout(request)
+        return self._prepare_response({'status': 'success'}, status=status.HTTP_200_OK)
+
+    def _prepare_response(self, data, status):
+        response = Response(data, status=status)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
 
 
 class RegisterUserView(APIView):
     """
-    View to register a new user. 
-    This is a public API endpoint, so permission is set to AllowAny.
+    Register new user and login automatically.
     """
     permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
 
     def post(self, request, *args, **kwargs):
-        """
-        Handle user registration by accepting the user data and creating a new user.
-        """
-        serializer = UserSerializer(data=request.data)
+        serializer = UserSerializer(data=request.data, context={'request': request})
+
         if serializer.is_valid():
             user = serializer.save()
-            return self.add_no_cache_headers(Response(serializer.data, status=status.HTTP_201_CREATED))
-        return self.add_no_cache_headers(Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST))
+            login(request, user)
 
-    def add_no_cache_headers(self, response):
-        """
-        Add no-cache headers to the response.
-        """
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            return self._prepare_response({
+                'status': 'success',
+                'user_id': user.id
+            }, status=status.HTTP_201_CREATED)
+
+        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _prepare_response(self, data, status):
+        response = Response(data, status=status)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'
         return response
+
+
+class UserProfileView(APIView):
+    """
+    View and update authenticated user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def get(self, request):
+        serializer = UserProfileSerializer(request.user)
+        return self._prepare_response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        serializer = UserProfileSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return self._prepare_response(serializer.data, status=status.HTTP_200_OK)
+
+        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _prepare_response(self, data, status):
+        response = Response(data, status=status)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+
+
+class PasswordChangeView(APIView):
+    """
+    Allow authenticated users to change their password.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
+
+        if serializer.is_valid():
+            request.user.set_password(serializer.validated_data['new_password'])
+            request.user.save()
+            update_session_auth_hash(request, request.user)
+
+            return self._prepare_response({'status': 'password changed successfully'}, status=status.HTTP_200_OK)
+
+        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _prepare_response(self, data, status):
+        response = Response(data, status=status)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+
+
+class UserViewSet(ModelViewSet):
+    """
+    Manage users: staff sees all, regular sees only self.
+    """
+    queryset = CustomUser.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return CustomUser.objects.all().order_by('-date_joined')
+        return CustomUser.objects.filter(id=user.id)
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        self._add_security_headers(response)
+        return response
+
+    def _add_security_headers(self, response):
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+    def perform_destroy(self, instance):
+        super().perform_destroy(instance)
+        cache.clear()
