@@ -6,6 +6,9 @@ from rest_framework.decorators import action
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.conf import settings
+import os
+from urllib.parse import quote
 from .models import File
 from .serializers import FileSerializer
 import logging
@@ -59,33 +62,47 @@ class FileViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
     def get_shared_link(self, request, pk=None):
         """
-        Generates and returns a unique link to download the file.
+        Generates and returns a unique link to view the file (not download).
         Creates absolute URL using current request's domain.
         """
         file = self.get_object()
-        shared_url = request.build_absolute_uri(file.get_shared_url())
+        shared_url = request.build_absolute_uri(f'/files/{file.id}/view/')
         response = Response({"shared_link": shared_url})
         return self.add_no_cache_headers(response)
 
-    @action(detail=False, methods=['get'], url_path='download/(?P<shared_link>[^/]+)', permission_classes=[AllowAny])
-    def download_file(self, request, shared_link=None):
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
         """
-        Processes requests to download files using a unique link.
+        Downloads the file as an attachment.
         Updates last_downloaded timestamp on successful download.
-        Returns the file as attachment with proper caching headers.
         """
-        file_instance = get_object_or_404(File, shared_link=shared_link)
+        file = get_object_or_404(File, pk=pk, user=request.user)
         try:
-            # Update last download timestamp before serving the file
-            file_instance.last_downloaded = timezone.now()
-            file_instance.save()
+            file.last_downloaded = timezone.now()
+            file.save()
             
-            response = FileResponse(file_instance.file.open(), 
-                                  as_attachment=True, 
-                                  filename=file_instance.file.name.split('/')[-1])
+            file_path = os.path.join(settings.MEDIA_ROOT, file.file.name)
+            response = FileResponse(open(file_path, 'rb'), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{quote(file.name)}"'
             return self.add_no_cache_headers(response)
         except Exception as e:
             logger.error(f"File download error: {str(e)}")
+            raise Http404("File not found")
+
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny])
+    def view(self, request, pk=None):
+        """
+        Displays the file inline in browser (for shared links).
+        Does not require authentication for public access.
+        """
+        file = get_object_or_404(File, pk=pk)
+        try:
+            file_path = os.path.join(settings.MEDIA_ROOT, file.file.name)
+            response = FileResponse(open(file_path, 'rb'))
+            response['Content-Disposition'] = f'inline; filename="{quote(file.name)}"'
+            return self.add_no_cache_headers(response)
+        except Exception as e:
+            logger.error(f"File view error: {str(e)}")
             raise Http404("File not found")
 
     @action(detail=True, 
