@@ -1,88 +1,90 @@
 import json
-import jwt
-from channels.generic.websocket import AsyncWebsocketConsumer
-from django.conf import settings
 import logging
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from django.contrib.auth.models import AnonymousUser
 
-# Configuring the logger
 logger = logging.getLogger(__name__)
 
 class FileConsumer(AsyncWebsocketConsumer):
+    """
+    Handles real-time file updates through WebSocket connections.
+    Uses Django's session authentication via cookies.
+    """
+
     async def connect(self):
         """
-        Handles the WebSocket connection when the client connects.
+        Handles new WebSocket connection.
+        Rejects unauthenticated users and adds authenticated users to update group.
         """
-        query_string = self.scope.get("query_string", b"").decode()
-        token = None
+        self.room_group_name = 'file_updates'
+        self.user = self.scope["user"]
 
-        # Extracted the token from the query string
-        if "token=" in query_string:
-            token = query_string.split("token=")[1].split("&")[0]
-
-        if not token:
-            logger.error("Token not provided in query string")
+        if isinstance(self.user, AnonymousUser):
+            logger.warning("Rejected unauthenticated WebSocket connection")
             await self.close(code=4001)
             return
 
-        logger.debug(f"Token received: {token}")
-
-        try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            logger.debug(f"Decoded token: {decoded_token}")
-
-            # Saving user information (optional)
-            self.user_id = decoded_token.get("user_id")
-
-            if not self.user_id:
-                logger.error("Token is valid but user_id is missing")
-                await self.close(code=4003)
-                return
-
-            await self.accept()
-            logger.info(f"WebSocket connection accepted for user_id: {self.user_id}")
-
-        except jwt.ExpiredSignatureError:
-            logger.warning("Token has expired")
-            await self.close(code=4004)
-        except jwt.InvalidTokenError as e:
-            logger.error(f"Invalid token: {e}")
-            await self.close(code=4005)
-        except Exception as e:
-            logger.critical(f"Unexpected error during connection: {e}")
-            await self.close(code=4006)
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+        await self.accept()
+        logger.info(f"Accepted WebSocket connection for user: {self.user.username}")
 
     async def disconnect(self, close_code):
         """
         Handles WebSocket disconnection.
+        
+        Args:
+            close_code (int): WebSocket close code
         """
-        logger.info(f"WebSocket disconnected for user_id: {getattr(self, 'user_id', 'Unknown')} with close code: {close_code}")
+        if hasattr(self, 'room_group_name'):
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+        logger.info(f"WebSocket disconnected with code: {close_code}")
 
     async def receive(self, text_data):
         """
-        Handles incoming WebSocket messages.
+        Processes incoming WebSocket messages.
+        
+        Args:
+            text_data (str): JSON-encoded message data
         """
-        logger.debug(f"Received data: {text_data}")
-
         try:
             data = json.loads(text_data)
-            logger.info(f"Parsed data: {data}")
+            logger.debug(f"Received WebSocket message: {data}")
 
-            response = {
-                'message': 'Data received successfully',
-                'received_data': data,
-            }
+            if data.get('action') == 'ping':
+                await self.send(json.dumps({
+                    'action': 'pong',
+                    'user': self.user.username
+                }))
 
-            await self.send(text_data=json.dumps(response))
-            logger.debug(f"Sent response: {response}")
-        
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON decode error: {e}")
-            await self.send(text_data=json.dumps({
+        except json.JSONDecodeError:
+            logger.warning("Received invalid JSON via WebSocket")
+            await self.send(json.dumps({
                 'error': 'Invalid JSON format'
             }))
+
+    async def file_notification(self, event):
+        """
+        Broadcasts file updates to all connected clients.
         
-        except Exception as e:
-            logger.error(f"Unexpected error during receive: {e}")
+        Args:
+            event (dict): Contains:
+                - file_id (int): Updated file ID
+                - action (str): 'created', 'updated' or 'deleted'
+                - file_data (dict): File information (optional)
+        """
+        try:
             await self.send(text_data=json.dumps({
-                'error': 'An unexpected error occurred'
+                'type': 'file_update',
+                'file_id': event['file_id'],
+                'action': event['action'],
+                'data': event.get('file_data', {})
             }))
+        except Exception as e:
+            logger.error(f"Failed to send file update: {str(e)}")

@@ -1,34 +1,40 @@
 """
 ASGI config for cloud_storage_service project.
 
-This file configures the ASGI application to handle HTTP and WebSocket protocols.
-
-For more information on this file, see:
-https://docs.djangoproject.com/en/5.1/howto/deployment/asgi/
+It exposes the ASGI callable as a module-level variable named `application`.
+Handles both HTTP and WebSocket protocols with session authentication.
 """
 
 import os
+import django
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-from django.urls import path
-from files import consumers
+from django.urls import re_path
 import logging
 
+# Initialize Django ASGI application early to ensure AppRegistry is loaded
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cloud_storage_service.settings')
+django.setup()
+
+# Get logger instance
 logger = logging.getLogger(__name__)
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cloud_storage_service.settings')
+# Import consumers only AFTER Django setup
+from files import consumers  # noqa: E402
 
-django_asgi_app = get_asgi_application()
+# WebSocket URL patterns
+websocket_urlpatterns = [
+    re_path(r'ws/files/$', consumers.FileConsumer.as_asgi()),
+]
 
 application = ProtocolTypeRouter({
-    "http": django_asgi_app,
-
+    "http": get_asgi_application(),
     "websocket": AuthMiddlewareStack(
-        URLRouter([
-            path('ws/files/', consumers.FileConsumer.as_asgi()),
-        ])
+        URLRouter(
+            websocket_urlpatterns
+        )
     ),
 })
 
-logger.debug("ASGI application configured")
+logger.info("ASGI application successfully configured")
