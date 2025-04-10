@@ -11,6 +11,9 @@ backend/*.db
 backend/*.sqlite3
 !backend/.env.example
 
+# Ignore the staticfiles directory inside backend
+/backend/staticfiles/
+
 # Logs and debug
 *.log
 *.pot

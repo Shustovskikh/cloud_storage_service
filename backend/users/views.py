@@ -1,4 +1,5 @@
 from django.contrib.auth import login, logout, update_session_auth_hash
+from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,9 +14,13 @@ from .serializers import (
     PasswordChangeSerializer
 )
 import logging
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.utils.decorators import method_decorator
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class UserLoginView(APIView):
     """
     Handle user login using email and password via session auth.
@@ -30,13 +35,21 @@ class UserLoginView(APIView):
             user = serializer.validated_data['user']
             login(request, user)
 
-            response_data = {
+            response = self._prepare_response({
                 'status': 'success',
                 'user_id': user.id,
                 'is_staff': user.is_staff
-            }
+            }, status=status.HTTP_200_OK)
 
-            return self._prepare_response(response_data, status=status.HTTP_200_OK)
+            response.set_cookie(
+                'sessionid',
+                request.session.session_key,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                max_age=86400  # 1 day
+            )
+            return response
 
         return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -57,7 +70,9 @@ class UserLogoutView(APIView):
 
     def post(self, request, *args, **kwargs):
         logout(request)
-        return self._prepare_response({'status': 'success'}, status=status.HTTP_200_OK)
+        response = self._prepare_response({'status': 'success'}, status=status.HTTP_200_OK)
+        response.delete_cookie('sessionid')
+        return response
 
     def _prepare_response(self, data, status):
         response = Response(data, status=status)
@@ -67,6 +82,7 @@ class UserLogoutView(APIView):
         return response
 
 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class RegisterUserView(APIView):
     """
     Register new user and login automatically.
@@ -81,10 +97,20 @@ class RegisterUserView(APIView):
             user = serializer.save()
             login(request, user)
 
-            return self._prepare_response({
+            response = self._prepare_response({
                 'status': 'success',
                 'user_id': user.id
             }, status=status.HTTP_201_CREATED)
+
+            response.set_cookie(
+                'sessionid',
+                request.session.session_key,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                max_age=86400  # 1 day
+            )
+            return response
 
         return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -94,6 +120,21 @@ class RegisterUserView(APIView):
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'
         return response
+
+
+class SessionCheckView(APIView):
+    """
+    Check if user session is valid
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def get(self, request):
+        return Response({
+            'isAuthenticated': True,
+            'user_id': request.user.id,
+            'is_staff': request.user.is_staff
+        }, status=status.HTTP_200_OK)
 
 
 class UserProfileView(APIView):
