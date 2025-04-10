@@ -219,3 +219,10 @@ LOGGING = {
         },
     },
 }
+
+# Checking the configuration at startup
+if DEBUG:
+    print("\n✔ The configuration has been uploaded successfully:")
+    print(f"• The database: {DATABASES['default']['HOST']}:{DATABASES['default']['PORT']}")
+    print(f"• Redis: {REDIS_HOST}:{REDIS_PORT}")
+    print(f"• Static: {STATIC_ROOT}\n")

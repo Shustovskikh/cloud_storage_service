@@ -10,8 +10,9 @@ backend/*.local
 backend/*.db
 backend/*.sqlite3
 !backend/.env.example
-backend/scripts/*.bat
-!backend/scripts/reload.*
+
+# Ignore all files in backend/scripts/
+backend/scripts/*
 
 # Ignore the staticfiles directory inside backend
 /backend/staticfiles/
@@ -96,4 +97,4 @@ celerybeat-schedule
 # Project specific
 dump.rdb
 *.bak
-*.tmpbackend/scripts/
+*.tmp
