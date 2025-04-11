@@ -1,17 +1,17 @@
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
-import os
 from urllib.parse import quote
 from .models import File
 from .serializers import FileSerializer
 import logging
+from rest_framework.authentication import SessionAuthentication
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,9 @@ class FileViewSet(viewsets.ModelViewSet):
     """
     queryset = File.objects.all()
     serializer_class = FileSerializer
+    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         """
@@ -49,16 +50,6 @@ class FileViewSet(viewsets.ModelViewSet):
         except Exception as e:
             raise Exception(f"Error deleting file: {e}")
 
-    def list(self, request, *args, **kwargs):
-        """
-        Override list to ensure fresh data is sent on each request.
-        Adds no-cache headers to prevent browser caching of file lists.
-        """
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        response = Response(serializer.data)
-        return self.add_no_cache_headers(response)
-
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
     def get_shared_link(self, request, pk=None):
         """
@@ -67,8 +58,7 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         file = self.get_object()
         shared_url = request.build_absolute_uri(f'/files/{file.id}/view/')
-        response = Response({"shared_link": shared_url})
-        return self.add_no_cache_headers(response)
+        return Response({"shared_link": shared_url})
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
@@ -81,10 +71,9 @@ class FileViewSet(viewsets.ModelViewSet):
             file.last_downloaded = timezone.now()
             file.save()
             
-            file_path = os.path.join(settings.MEDIA_ROOT, file.file.name)
-            response = FileResponse(open(file_path, 'rb'), as_attachment=True)
+            response = FileResponse(file.file.open('rb'), as_attachment=True)
             response['Content-Disposition'] = f'attachment; filename="{quote(file.name)}"'
-            return self.add_no_cache_headers(response)
+            return response
         except Exception as e:
             logger.error(f"File download error: {str(e)}")
             raise Http404("File not found")
@@ -97,10 +86,9 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         file = get_object_or_404(File, pk=pk)
         try:
-            file_path = os.path.join(settings.MEDIA_ROOT, file.file.name)
-            response = FileResponse(open(file_path, 'rb'))
+            response = FileResponse(file.file.open('rb'))
             response['Content-Disposition'] = f'inline; filename="{quote(file.name)}"'
-            return self.add_no_cache_headers(response)
+            return response
         except Exception as e:
             logger.error(f"File view error: {str(e)}")
             raise Http404("File not found")
@@ -108,8 +96,7 @@ class FileViewSet(viewsets.ModelViewSet):
     @action(detail=True, 
             methods=['put'], 
             permission_classes=[IsAuthenticated],
-            parser_classes=[MultiPartParser, FormParser],
-            url_path='update')
+            parser_classes=[MultiPartParser, FormParser])
     def update_file(self, request, pk=None):
         """
         Updates the file name and comment via form-data.
@@ -117,20 +104,17 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         file_instance = self.get_object()
         
-        # Allow admin or file owner to update
         if not (request.user.is_staff or request.user == file_instance.user):
             return Response(
                 {'error': 'You can only update your own files.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Process form-data
         data = {
             'name': request.data.get('name'),
             'comment': request.data.get('comment')
         }
         
-        # Remove None values to keep existing data
         data = {k: v for k, v in data.items() if v is not None}
 
         serializer = self.get_serializer(
@@ -149,15 +133,8 @@ class FileViewSet(viewsets.ModelViewSet):
     def finalize_response(self, request, response, *args, **kwargs):
         """
         Add no-cache headers to all responses in this viewset.
-        Ensures browsers don't cache sensitive file data.
         """
         response = super().finalize_response(request, response, *args, **kwargs)
-        return self.add_no_cache_headers(response)
-
-    def add_no_cache_headers(self, response):
-        """
-        Utility method to add no-cache headers to a response.
-        """
         response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response['Pragma'] = 'no-cache'
         response['Expires'] = '0'

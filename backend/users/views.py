@@ -1,12 +1,12 @@
 from django.contrib.auth import login, logout, update_session_auth_hash
-from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
-from .models import CustomUser
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from .serializers import (
     UserSerializer,
     UserLoginSerializer,
@@ -14,118 +14,113 @@ from .serializers import (
     PasswordChangeSerializer
 )
 import logging
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.utils.decorators import method_decorator
-from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
+
+class SecureResponseMixin:
+    """Mixin for adding security headers to all API responses"""
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        if not settings.DEBUG:
+            response['X-Content-Type-Options'] = 'nosniff'
+            response['X-Frame-Options'] = 'DENY'
+        return response
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
-class UserLoginView(APIView):
-    """
-    Handle user login using email and password via session auth.
-    """
+class UserLoginView(APIView, SecureResponseMixin):
+    """Handle user authentication using session cookies"""
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request):
         serializer = UserLoginSerializer(data=request.data, context={'request': request})
-
+        
         if serializer.is_valid():
             user = serializer.validated_data['user']
             login(request, user)
-
-            response = self._prepare_response({
+            logger.info(f"User {user.id} logged in")
+            
+            response = Response({
                 'status': 'success',
                 'user_id': user.id,
+                'username': user.username,
                 'is_staff': user.is_staff
             }, status=status.HTTP_200_OK)
-
+            
             response.set_cookie(
-                'sessionid',
+                settings.SESSION_COOKIE_NAME,
                 request.session.session_key,
                 httponly=True,
-                secure=True,
-                samesite='Lax',
-                max_age=86400  # 1 day
+                secure=not settings.DEBUG,
+                samesite='Lax'
             )
             return response
+            
+        logger.warning(f"Login failed: {serializer.errors}")
+        return Response({
+            'status': 'error',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _prepare_response(self, data, status):
-        response = Response(data, status=status)
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        return response
-
-
-class UserLogoutView(APIView):
-    """
-    Handle session logout.
-    """
+@method_decorator(csrf_protect, name='dispatch')
+class UserLogoutView(APIView, SecureResponseMixin):
+    """Handle user logout and session termination"""
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request):
+        logger.info(f"User {request.user.id} logging out")
         logout(request)
-        response = self._prepare_response({'status': 'success'}, status=status.HTTP_200_OK)
-        response.delete_cookie('sessionid')
+        response = Response({
+            'status': 'success',
+            'message': 'Logged out successfully'
+        }, status=status.HTTP_200_OK)
+        response.delete_cookie(settings.SESSION_COOKIE_NAME)
         return response
-
-    def _prepare_response(self, data, status):
-        response = Response(data, status=status)
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        return response
-
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
-class RegisterUserView(APIView):
-    """
-    Register new user and login automatically.
-    """
+class RegisterUserView(APIView, SecureResponseMixin):
+    """Handle new user registration"""
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
 
-    def post(self, request, *args, **kwargs):
-        serializer = UserSerializer(data=request.data, context={'request': request})
-
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        
         if serializer.is_valid():
             user = serializer.save()
             login(request, user)
-
-            response = self._prepare_response({
+            logger.info(f"New user registered: {user.id}")
+            
+            response = Response({
                 'status': 'success',
-                'user_id': user.id
+                'user_id': user.id,
+                'username': user.username
             }, status=status.HTTP_201_CREATED)
-
+            
             response.set_cookie(
-                'sessionid',
+                settings.SESSION_COOKIE_NAME,
                 request.session.session_key,
                 httponly=True,
-                secure=True,
-                samesite='Lax',
-                max_age=86400  # 1 day
+                secure=not settings.DEBUG,
+                samesite='Lax'
             )
             return response
+            
+        logger.warning(f"Registration failed: {serializer.errors}")
+        return Response({
+            'status': 'error',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _prepare_response(self, data, status):
-        response = Response(data, status=status)
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        return response
-
-
-class SessionCheckView(APIView):
-    """
-    Check if user session is valid
-    """
+class SessionCheckView(APIView, SecureResponseMixin):
+    """Verify active user session"""
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
 
@@ -133,74 +128,61 @@ class SessionCheckView(APIView):
         return Response({
             'isAuthenticated': True,
             'user_id': request.user.id,
+            'username': request.user.username,
             'is_staff': request.user.is_staff
         }, status=status.HTTP_200_OK)
 
-
-class UserProfileView(APIView):
-    """
-    View and update authenticated user's profile.
-    """
+class UserProfileView(APIView, SecureResponseMixin):
+    """Manage user profile information"""
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
-        return self._prepare_response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request):
         serializer = UserProfileSerializer(
-            request.user,
-            data=request.data,
+            request.user, 
+            data=request.data, 
             partial=True
         )
-
+        
         if serializer.is_valid():
             serializer.save()
-            return self._prepare_response(serializer.data, status=status.HTTP_200_OK)
+            logger.info(f"User {request.user.id} updated profile")
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        logger.warning(f"Profile update failed: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _prepare_response(self, data, status):
-        response = Response(data, status=status)
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        return response
-
-
-class PasswordChangeView(APIView):
-    """
-    Allow authenticated users to change their password.
-    """
+class PasswordChangeView(APIView, SecureResponseMixin):
+    """Handle password change requests"""
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
 
     def post(self, request):
-        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
-
+        serializer = PasswordChangeSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
         if serializer.is_valid():
             request.user.set_password(serializer.validated_data['new_password'])
             request.user.save()
             update_session_auth_hash(request, request.user)
+            logger.info(f"User {request.user.id} changed password")
+            return Response({
+                'status': 'success',
+                'message': 'Password changed successfully'
+            }, status=status.HTTP_200_OK)
+            
+        logger.warning(f"Password change failed: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            return self._prepare_response({'status': 'password changed successfully'}, status=status.HTTP_200_OK)
-
-        return self._prepare_response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _prepare_response(self, data, status):
-        response = Response(data, status=status)
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        return response
-
-
-class UserViewSet(ModelViewSet):
-    """
-    Manage users: staff sees all, regular sees only self.
-    """
-    queryset = CustomUser.objects.all()
+class UserViewSet(ModelViewSet, SecureResponseMixin):
+    """User management endpoint (admin only)"""
+    queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication]
@@ -208,21 +190,5 @@ class UserViewSet(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_staff:
-            return CustomUser.objects.all().order_by('-date_joined')
-        return CustomUser.objects.filter(id=user.id)
-
-    def finalize_response(self, request, response, *args, **kwargs):
-        response = super().finalize_response(request, response, *args, **kwargs)
-        self._add_security_headers(response)
-        return response
-
-    def _add_security_headers(self, response):
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-        response['Pragma'] = 'no-cache'
-        response['Expires'] = '0'
-        response['X-Content-Type-Options'] = 'nosniff'
-        return response
-
-    def perform_destroy(self, instance):
-        super().perform_destroy(instance)
-        cache.clear()
+            return User.objects.all()
+        return User.objects.filter(id=user.id)
