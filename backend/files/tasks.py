@@ -3,26 +3,38 @@ from datetime import timedelta
 from django.utils.timezone import now
 from .models import File
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
 @shared_task
 def delete_old_files():
     """
-    Deletes files whose lifetime has exceeded 30 days
+    Deletes files whose lifetime has exceeded 30 days.
+    Runs automatically via Celery beat schedule.
     """
-    cutoff_date = now() - timedelta(days=30)
-    old_files = File.objects.filter(uploaded_at__lt=cutoff_date)
+    try:
+        cutoff_date = now() - timedelta(days=30)
+        deleted_count, _ = File.objects.filter(uploaded_at__lt=cutoff_date).delete()
+        logger.info(f"Successfully deleted {deleted_count} old files")
+        return deleted_count
+    except Exception as e:
+        logger.error(f"Error deleting old files: {str(e)}")
+        raise
 
-    for file in old_files:
-        try:
-            if file.file and os.path.exists(file.file.path):
-                file.file.delete(save=False)
-
-            file.delete()
-
-            logger.info(f"Deleted file: {file.name} (User ID: {file.user.id})")
-
-        except Exception as e:
-            logger.error(f"Error deleting file {file.name}: {e}")
+@shared_task
+def process_file(file_id):
+    """
+    Minimal file processing task.
+    Currently just logs the file receipt.
+    Can be extended with actual processing logic later.
+    """
+    try:
+        logger.info(f"File {file_id} received for processing")
+        return {
+            "status": "success",
+            "file_id": file_id,
+            "message": "File processing completed (mock)"
+        }
+    except Exception as e:
+        logger.error(f"Error processing file {file_id}: {str(e)}")
+        raise

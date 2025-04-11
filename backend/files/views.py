@@ -12,6 +12,7 @@ from .models import File
 from .serializers import FileSerializer
 import logging
 from rest_framework.authentication import SessionAuthentication
+from .tasks import process_file
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class FileViewSet(viewsets.ModelViewSet):
     """
     ViewSet for handling file uploads, downloads and management.
     Provides CRUD operations with additional actions for file sharing.
+    Integrates with Celery for asynchronous file processing.
     """
     queryset = File.objects.all()
     serializer_class = FileSerializer
@@ -36,8 +38,14 @@ class FileViewSet(viewsets.ModelViewSet):
         return File.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        """Automatically assign the current user to new files"""
-        serializer.save(user=self.request.user)
+        """
+        Automatically assign the current user to new files.
+        Triggers Celery task for asynchronous file processing after creation.
+        """
+        file_instance = serializer.save(user=self.request.user)
+        # Trigger Celery task after file creation
+        process_file.delay(file_instance.id)
+        logger.info(f"Started processing for file ID {file_instance.id}")
 
     def perform_destroy(self, instance):
         """
@@ -47,7 +55,9 @@ class FileViewSet(viewsets.ModelViewSet):
         try:
             instance.file.delete()
             instance.delete()
+            logger.info(f"Deleted file ID {instance.id}")
         except Exception as e:
+            logger.error(f"Error deleting file ID {instance.id}: {e}")
             raise Exception(f"Error deleting file: {e}")
 
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
@@ -73,9 +83,10 @@ class FileViewSet(viewsets.ModelViewSet):
             
             response = FileResponse(file.file.open('rb'), as_attachment=True)
             response['Content-Disposition'] = f'attachment; filename="{quote(file.name)}"'
+            logger.info(f"Downloaded file ID {file.id}")
             return response
         except Exception as e:
-            logger.error(f"File download error: {str(e)}")
+            logger.error(f"File download error for ID {pk}: {str(e)}")
             raise Http404("File not found")
 
     @action(detail=True, methods=['get'], permission_classes=[AllowAny])
@@ -90,7 +101,7 @@ class FileViewSet(viewsets.ModelViewSet):
             response['Content-Disposition'] = f'inline; filename="{quote(file.name)}"'
             return response
         except Exception as e:
-            logger.error(f"File view error: {str(e)}")
+            logger.error(f"File view error for ID {pk}: {str(e)}")
             raise Http404("File not found")
 
     @action(detail=True, 
@@ -101,6 +112,7 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         Updates the file name and comment via form-data.
         Allows updates by file owner or admin.
+        Triggers Celery task if file content is updated.
         """
         file_instance = self.get_object()
         
@@ -125,14 +137,19 @@ class FileViewSet(viewsets.ModelViewSet):
         
         if serializer.is_valid():
             serializer.save()
+            # Trigger Celery task if file content was updated
+            if 'file' in request.FILES:
+                process_file.delay(file_instance.id)
+                logger.info(f"Triggered reprocessing for updated file ID {file_instance.id}")
             return Response(serializer.data, status=status.HTTP_200_OK)
         
-        logger.error(f"Update validation errors: {serializer.errors}")
+        logger.error(f"Update validation errors for file ID {pk}: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def finalize_response(self, request, response, *args, **kwargs):
         """
         Add no-cache headers to all responses in this viewset.
+        Ensures fresh data and prevents browser caching of sensitive file information.
         """
         response = super().finalize_response(request, response, *args, **kwargs)
         response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
