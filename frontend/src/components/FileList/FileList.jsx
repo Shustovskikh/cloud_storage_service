@@ -11,12 +11,23 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [editingFileId, setEditingFileId] = useState(null);
   const [fileUrls, setFileUrls] = useState({});
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [socket, setSocket] = useState(null);
 
-  const filteredFiles = Array.isArray(files)
-    ? files.filter((file) =>
-        file.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : [];
+  useEffect(() => {
+    const ws = new WebSocket(`wss://${window.location.host}/ws/files/`);
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'FILE_UPDATE') {
+        onFileChange();
+      }
+    };
+    setSocket(ws);
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   useEffect(() => {
     const urls = {};
@@ -25,6 +36,12 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
     });
     setFileUrls(urls);
   }, [files]);
+
+  const filteredFiles = Array.isArray(files)
+    ? files.filter((file) =>
+        file.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : [];
 
   const handleCopyLink = (fileId) => {
     const urlToCopy = fileUrls[fileId];
@@ -48,6 +65,7 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
 
   const handleConfirmDelete = async () => {
     try {
+      setIsProcessing(true);
       await onDeleteFile(selectedFileId);
       onFileChange();
       toast.success('File deleted successfully', {
@@ -61,6 +79,7 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
       });
       console.error('Error deleting file:', err);
     } finally {
+      setIsProcessing(false);
       setIsModalOpen(false);
     }
   };
@@ -90,6 +109,8 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
         onChange={(e) => setSearchTerm(e.target.value)}
         className="search-input"
       />
+
+      {isProcessing && <div className="loading-overlay">Processing...</div>}
 
       <table>
         <thead>
@@ -126,24 +147,28 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
                       <button
                         onClick={() => handleDownload(file.id)}
                         className="action-button"
+                        disabled={isProcessing}
                       >
                         Download
                       </button>
                       <button
                         onClick={() => handleCopyLink(file.id)}
                         className="action-button"
+                        disabled={isProcessing}
                       >
                         Copy Link
                       </button>
                       <button
                         onClick={() => setEditingFileId(file.id)}
                         className="action-button"
+                        disabled={isProcessing}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(file.id)}
                         className="action-button delete-button"
+                        disabled={isProcessing}
                       >
                         Delete
                       </button>
@@ -158,10 +183,11 @@ const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
 
       <ConfirmationModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => !isProcessing && setIsModalOpen(false)}
         onConfirm={handleConfirmDelete}
         title="Confirm Deletion"
         message="Are you sure you want to delete this file?"
+        isProcessing={isProcessing}
       />
 
       {editingFileId && (

@@ -13,16 +13,32 @@ const AllUserFiles = ({ files = [], onDeleteFile, onFileChange = () => {} }) => 
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastDownloadTimestamps, setLastDownloadTimestamps] = useState({});
   const [fileUrls, setFileUrls] = useState({});
+  const [socket, setSocket] = useState(null);
 
-  const filesArray = Array.isArray(files) ? files : [];
+  useEffect(() => {
+    const ws = new WebSocket(`wss://${window.location.host}/ws/files/`);
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'FILE_UPDATE') {
+        onFileChange();
+      }
+    };
+    setSocket(ws);
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   useEffect(() => {
     const urls = {};
-    filesArray.forEach(file => {
+    files.forEach(file => {
       urls[file.id] = `${window.location.origin}/files/${file.id}/view/`;
     });
     setFileUrls(urls);
-  }, [filesArray]);
+  }, [files]);
+
+  const filesArray = Array.isArray(files) ? files : [];
 
   const handleCopyLink = async (fileId) => {
     try {
