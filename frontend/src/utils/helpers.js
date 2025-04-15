@@ -1,17 +1,17 @@
+
 export const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-export const getToken = () => localStorage.getItem('accessToken');
+export const getUsername = () => localStorage.getItem('username');
 
-export const setToken = (accessToken, refreshToken) => {
-  if (accessToken) localStorage.setItem('accessToken', accessToken);
-  if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+export const setUsername = (username) => {
+  if (username) localStorage.setItem('username', username);
 };
 
-export const removeTokens = () => {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+export const clearUserData = () => {
+  localStorage.removeItem('username');
 };
 
-export const getAuthHeader = () => ({
-  Authorization: `Bearer ${getToken()}`,
-});
+export const isAuthenticated = async () => {
+  console.warn('The IsAuthenticated() method is deprecated. Use API verification');
+  return false;
+};
