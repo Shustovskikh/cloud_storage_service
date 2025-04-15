@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { setToken, removeTokens } from '../utils/helpers';
 import { login as reduxLogin, logout as reduxLogout } from '../authSlice';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -8,14 +7,11 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 const api = axios.create({
   baseURL: API_URL,
   timeout: 10000,
+  withCredentials: true,
 });
 
 api.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   error => {
@@ -65,7 +61,6 @@ api.interceptors.response.use(
 );
 
 const handleGlobalLogout = () => {
-  removeTokens();
   const store = require('../store').default;
   store.dispatch(reduxLogout());
   window.location.href = '/login';
@@ -73,14 +68,13 @@ const handleGlobalLogout = () => {
 
 export const login = async (username, password) => {
   try {
-    const response = await api.post('/token/', { username, password });
-    const { access, refresh, is_staff } = response.data;
-    setToken(access, refresh);
+    const response = await api.post('/token/', { username, password }, {
+      withCredentials: true
+    });
+    
     return { 
       success: true, 
-      access, 
-      refresh, 
-      is_staff 
+      is_staff: response.data.is_staff 
     };
   } catch (error) {
     return {
@@ -92,7 +86,9 @@ export const login = async (username, password) => {
 
 export const register = async (userData) => {
   try {
-    const response = await api.post('/users/register/', userData);
+    const response = await api.post('/users/register/', userData, {
+      withCredentials: true
+    });
     return { 
       success: true, 
       data: response.data 
@@ -106,25 +102,16 @@ export const register = async (userData) => {
 };
 
 export const refreshAccessToken = async (dispatch) => {
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) {
-    return { 
-      success: false, 
-      message: 'No refresh token available' 
-    };
-  }
-
   try {
-    const response = await api.post('/token/refresh/', { refresh: refreshToken });
-    const { access } = response.data;
+    const response = await api.post('/token/refresh/', {}, {
+      withCredentials: true
+    });
     
-    setToken(access, refreshToken);
     dispatch(reduxLogin({
       user: JSON.parse(localStorage.getItem('user')) || null,
-      tokens: { access, refresh: refreshToken },
     }));
     
-    return { success: true, access };
+    return { success: true };
   } catch (error) {
     handleGlobalLogout();
     return { 
@@ -134,8 +121,14 @@ export const refreshAccessToken = async (dispatch) => {
   }
 };
 
-export const logout = (dispatch) => {
-  handleGlobalLogout();
+export const logout = async (dispatch) => {
+  try {
+    await api.post('/users/logout/', {}, {
+      withCredentials: true
+    });
+  } finally {
+    handleGlobalLogout();
+  }
 };
 
 export { api };

@@ -1,34 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './FileList.css';
 import FileConfig from '../FileConfig/FileConfig';
 import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 
-const AllUserFiles = ({ files = [], onDeleteFile, onGetDownloadLink, onFileChange = () => {} }) => {
+const AllUserFiles = ({ files = [], onDeleteFile, onFileChange = () => {} }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [configFileId, setConfigFileId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastDownloadTimestamps, setLastDownloadTimestamps] = useState({});
+  const [fileUrls, setFileUrls] = useState({});
 
   const filesArray = Array.isArray(files) ? files : [];
+
+  useEffect(() => {
+    const urls = {};
+    filesArray.forEach(file => {
+      urls[file.id] = `${window.location.origin}/files/${file.id}/view/`;
+    });
+    setFileUrls(urls);
+  }, [filesArray]);
 
   const handleCopyLink = async (fileId) => {
     try {
       setIsProcessing(true);
-      const downloadLink = await onGetDownloadLink(fileId);
-      if (downloadLink?.shared_link) {
-        await navigator.clipboard.writeText(downloadLink.shared_link);
+      const urlToCopy = fileUrls[fileId];
+      if (urlToCopy) {
+        await navigator.clipboard.writeText(urlToCopy);
         toast.success('Link copied to clipboard!', {
           autoClose: 2000,
           hideProgressBar: true,
         });
       }
     } catch (error) {
-      toast.error('An error occurred when copying the link', {
-        autoClose: 3000,
+      toast.error('Failed to copy link', {
+        autoClose: 2000,
         hideProgressBar: true,
       });
       console.error('Copy error:', error);
@@ -53,7 +62,7 @@ const AllUserFiles = ({ files = [], onDeleteFile, onGetDownloadLink, onFileChang
       });
     } catch (error) {
       toast.error('Error deleting file', {
-        autoClose: 3000,
+        autoClose: 2000,
         hideProgressBar: true,
       });
       console.error('Delete error:', error);
@@ -63,29 +72,26 @@ const AllUserFiles = ({ files = [], onDeleteFile, onGetDownloadLink, onFileChang
     }
   };
 
-  const handleDownload = async (fileId) => {
+  const handleDownload = (fileId) => {
     try {
       setIsProcessing(true);
-      const response = await onGetDownloadLink(fileId);
-      if (response?.shared_link) {
-        setLastDownloadTimestamps(prev => ({
-          ...prev,
-          [fileId]: new Date().toISOString()
-        }));
-        
-        window.open(response.shared_link, '_blank');
-        toast.success('File download started', {
-          autoClose: 2000,
-          hideProgressBar: true,
-        });
-        
-        setTimeout(() => {
-          onFileChange();
-        }, 1000);
-      }
+      setLastDownloadTimestamps(prev => ({
+        ...prev,
+        [fileId]: new Date().toISOString()
+      }));
+      
+      window.open(`${window.location.origin}/files/${fileId}/download/`, '_blank');
+      toast.success('Download started', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
+      
+      setTimeout(() => {
+        onFileChange();
+      }, 1000);
     } catch (error) {
-      toast.error('Error downloading file', {
-        autoClose: 3000,
+      toast.error('Download failed', {
+        autoClose: 2000,
         hideProgressBar: true,
       });
       console.error('Download error:', error);
@@ -169,27 +175,27 @@ const AllUserFiles = ({ files = [], onDeleteFile, onGetDownloadLink, onFileChang
                   <td>{file.username}</td>
                   <td>{file.comment || '-'}</td>
                   <td>
-                    <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+                    <div className="file-actions">
                       <button
                         onClick={() => handleDownload(file.id)}
-                        className="action-button download-button"
+                        className="action-button"
                         disabled={isProcessing}
                       >
                         Download
                       </button>
                       <button
                         onClick={() => handleCopyLink(file.id)}
-                        className="action-button copy-link-button"
+                        className="action-button"
                         disabled={isProcessing}
                       >
                         Copy Link
                       </button>
                       <button
                         onClick={() => handleConfig(file.id)}
-                        className="action-button config-button"
+                        className="action-button"
                         disabled={isProcessing}
                       >
-                        Config
+                        Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(file.id)}
@@ -233,7 +239,6 @@ AllUserFiles.propTypes = {
     PropTypes.object
   ]),
   onDeleteFile: PropTypes.func.isRequired,
-  onGetDownloadLink: PropTypes.func.isRequired,
   onFileChange: PropTypes.func
 };
 

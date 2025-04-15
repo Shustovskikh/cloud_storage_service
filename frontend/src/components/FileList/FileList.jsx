@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './FileList.css';
 import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import FileConfig from '../FileConfig/FileConfig';
 import PropTypes from 'prop-types';
 import { toast } from 'react-toastify';
 
-const FileList = ({ files, onDeleteFile, onGetDownloadLink, onFileChange = () => {} }) => {
+const FileList = ({ files, onDeleteFile, onFileChange = () => {} }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFileId, setSelectedFileId] = useState(null);
   const [editingFileId, setEditingFileId] = useState(null);
+  const [fileUrls, setFileUrls] = useState({});
 
   const filteredFiles = Array.isArray(files)
     ? files.filter((file) =>
@@ -17,35 +18,26 @@ const FileList = ({ files, onDeleteFile, onGetDownloadLink, onFileChange = () =>
       )
     : [];
 
-  const handleCopyLink = async (fileId) => {
-    try {
-      const downloadLink = await onGetDownloadLink(fileId);
-      
-      if (downloadLink?.shared_link) {
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(downloadLink.shared_link);
-          toast.success('Link copied to clipboard!', {
-            autoClose: 2000,
-            hideProgressBar: true,
-          });
-        } else {
-          toast.error('Clipboard API not supported in this browser', {
-            autoClose: 3000,
-            hideProgressBar: true,
-          });
-        }
-      } else {
-        toast.error('Could not get the link', {
-          autoClose: 3000,
+  useEffect(() => {
+    const urls = {};
+    files.forEach(file => {
+      urls[file.id] = `${window.location.origin}/files/${file.id}/view/`;
+    });
+    setFileUrls(urls);
+  }, [files]);
+
+  const handleCopyLink = (fileId) => {
+    const urlToCopy = fileUrls[fileId];
+    if (urlToCopy) {
+      navigator.clipboard.writeText(urlToCopy)
+        .then(() => toast.success('Link copied to clipboard!', {
+          autoClose: 2000,
           hideProgressBar: true,
-        });
-      }
-    } catch (error) {
-      toast.error('An error occurred when copying the link', {
-        autoClose: 3000,
-        hideProgressBar: true,
-      });
-      console.error('Error when copying the link:', error);
+        }))
+        .catch(() => toast.error('Clipboard API not supported', {
+          autoClose: 2000,
+          hideProgressBar: true,
+        }));
     }
   };
 
@@ -58,27 +50,23 @@ const FileList = ({ files, onDeleteFile, onGetDownloadLink, onFileChange = () =>
     try {
       await onDeleteFile(selectedFileId);
       onFileChange();
-      setIsModalOpen(false);
+      toast.success('File deleted successfully', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
     } catch (err) {
+      toast.error('Error deleting file', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
       console.error('Error deleting file:', err);
+    } finally {
       setIsModalOpen(false);
     }
   };
 
-  const handleDownload = async (fileId) => {
-    try {
-      const response = await onGetDownloadLink(fileId);
-      
-      if (response?.shared_link) {
-        window.open(response.shared_link, '_blank');
-        
-        setTimeout(() => {
-          onFileChange();
-        }, 1000);
-      }
-    } catch (error) {
-      console.error('Error during download:', error);
-    }
+  const handleDownload = (fileId) => {
+    window.open(`${window.location.origin}/files/${fileId}/download/`, '_blank');
   };
 
   const handleFileUpdated = () => {
@@ -134,24 +122,24 @@ const FileList = ({ files, onDeleteFile, onGetDownloadLink, onFileChange = () =>
                   <td>{formatDate(file.last_downloaded)}</td>
                   <td>{file.comment || '-'}</td>
                   <td>
-                    <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+                    <div className="file-actions">
                       <button
                         onClick={() => handleDownload(file.id)}
-                        className="action-button download-button"
+                        className="action-button"
                       >
                         Download
                       </button>
                       <button
                         onClick={() => handleCopyLink(file.id)}
-                        className="action-button copy-link-button"
+                        className="action-button"
                       >
                         Copy Link
                       </button>
                       <button
                         onClick={() => setEditingFileId(file.id)}
-                        className="action-button config-button"
+                        className="action-button"
                       >
-                        Config
+                        Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(file.id)}
@@ -190,7 +178,6 @@ const FileList = ({ files, onDeleteFile, onGetDownloadLink, onFileChange = () =>
 FileList.propTypes = {
   files: PropTypes.array.isRequired,
   onDeleteFile: PropTypes.func.isRequired,
-  onGetDownloadLink: PropTypes.func.isRequired,
   onFileChange: PropTypes.func
 };
 

@@ -1,18 +1,14 @@
 import axios from 'axios';
-import { getAuthHeader, setToken, removeTokens } from '../utils/helpers';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
+const API_URL = process.env.REACT_APP_API_URL;
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const authHeader = getAuthHeader();
-    if (authHeader) {
-      config.headers = { ...config.headers, ...authHeader };
-    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -22,23 +18,10 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        removeTokens();
-        return Promise.reject({ message: 'No refresh token available' });
-      }
-
-      try {
-        const { data } = await axios.post(`${API_URL}/token/refresh/`, { refresh: refreshToken });
-        const { access } = data;
-        setToken(access, refreshToken);
-
-        error.config.headers.Authorization = `Bearer ${access}`;
-        return axiosInstance(error.config);
-      } catch (refreshError) {
-        removeTokens();
-        return Promise.reject({ message: 'Token refresh failed', details: refreshError.message });
-      }
+      return Promise.reject({ 
+        message: 'Authentication required', 
+        redirectToLogin: true 
+      });
     }
     return Promise.reject(error);
   }
@@ -57,7 +40,11 @@ export const uploadFile = async (file, name, comment = 'No comment') => {
     return { success: true, data: response.data };
   } catch (error) {
     console.error('File upload error:', error);
-    return { success: false, message: error.response?.data?.detail || 'File upload failed' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'File upload failed',
+      redirectToLogin: error.response?.status === 401 
+    };
   }
 };
 
@@ -67,17 +54,25 @@ export const listFiles = async () => {
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Fetch files error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to fetch files' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to fetch files',
+      redirectToLogin: error.response?.status === 401 
+    };
   }
 };
 
 export const listAdminFiles = async () => {
   try {
-    const response = await axiosInstance.get('/files/?user=1');
+    const response = await axiosInstance.get('/files/admin/');
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Fetch admin files error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to fetch admin files' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to fetch admin files',
+      redirectToLogin: error.response?.status === 401 
+    };
   }
 };
 
@@ -87,31 +82,48 @@ export const deleteFile = async (fileId) => {
     return { success: true };
   } catch (error) {
     console.error('Delete file error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to delete file' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to delete file',
+      redirectToLogin: error.response?.status === 401 
+    };
   }
+};
+
+export const getFileUrl = (fileId) => {
+  return `${API_URL}/files/${fileId}/view/`;
 };
 
 export const getDownloadLink = async (fileId) => {
   try {
-    const response = await axiosInstance.get(`/files/${fileId}/get_shared_link/`);
-    console.log('Download link response:', response.data);
-    return { success: true, shared_link: response.data.shared_link };
+    const response = await axiosInstance.get(`/files/${fileId}/share/`);
+    return { 
+      success: true, 
+      shared_link: response.data.shared_link || getFileUrl(fileId) 
+    };
   } catch (error) {
     console.error('Get shared link error:', error);
     return {
       success: false,
       message: error.response?.data?.detail || 'Failed to get shared link',
+      redirectToLogin: error.response?.status === 401
     };
   }
 };
 
-export const getUserInfo = async (userId) => {
+export const downloadFile = async (fileId) => {
   try {
-    const response = await axiosInstance.get(`/users/${userId}/`);
+    const response = await axiosInstance.get(`/files/${fileId}/download/`, {
+      responseType: 'blob'
+    });
     return { success: true, data: response.data };
   } catch (error) {
-    console.error('Get user info error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to get user info' };
+    console.error('Download file error:', error);
+    return {
+      success: false,
+      message: error.response?.data?.detail || 'Failed to download file',
+      redirectToLogin: error.response?.status === 401
+    };
   }
 };
 
@@ -121,38 +133,41 @@ export const fetchAllUsers = async () => {
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Fetch users error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to fetch users' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to fetch users',
+      redirectToLogin: error.response?.status === 401
+    };
   }
 };
 
 export const deleteUser = async (userId) => {
   try {
-    const response = await axiosInstance.delete(`/users/${userId}/`);
-    return { success: true, data: response.data };
+    await axiosInstance.delete(`/users/${userId}/`);
+    return { success: true };
   } catch (error) {
     console.error('Delete user error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to delete user' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to delete user',
+      redirectToLogin: error.response?.status === 401
+    };
   }
 };
 
 export const updateFile = async (fileId, name, comment) => {
-  const formData = new FormData();
-  formData.append('name', name);
-  formData.append('comment', comment);
-
   try {
-    const response = await axiosInstance.put(`/files/${fileId}/update/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    const response = await axiosInstance.patch(`/files/${fileId}/`, { 
+      name, 
+      comment 
     });
-
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Update file error:', error);
     return { 
       success: false, 
-      message: error.response?.data?.detail || error.response?.data || 'Failed to update file' 
+      message: error.response?.data?.detail || 'Failed to update file',
+      redirectToLogin: error.response?.status === 401
     };
   }
 };
@@ -163,6 +178,12 @@ export const fetchFile = async (fileId) => {
     return { success: true, data: response.data };
   } catch (error) {
     console.error('Fetch file error:', error);
-    return { success: false, message: error.response?.data?.detail || 'Failed to fetch file data' };
+    return { 
+      success: false, 
+      message: error.response?.data?.detail || 'Failed to fetch file data',
+      redirectToLogin: error.response?.status === 401
+    };
   }
 };
+
+export default axiosInstance;

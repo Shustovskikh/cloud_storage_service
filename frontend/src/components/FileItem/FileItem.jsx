@@ -4,66 +4,80 @@ import ConfirmationModal from '../ConfirmationModal/ConfirmationModal';
 import { toast } from 'react-toastify';
 import './FileItem.css';
 
-const FileItem = ({ file, onCopyLink, downloadLink, onDelete, onFileUpdate }) => {
+const FileItem = ({ file, onDelete, onFileUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [fileUrl, setFileUrl] = useState(null);
 
-  const handleDeleteClick = () => {
-    setIsModalOpen(true);
+  const handleDelete = async () => {
+    try {
+      await onDelete(file.id);
+      toast.success('File deleted successfully', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
+    } catch (error) {
+      toast.error('Failed to delete file', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      });
+    } finally {
+      setIsModalOpen(false);
+    }
   };
 
-  const handleConfirmDelete = () => {
-    onDelete(file.id);
-    setIsModalOpen(false);
+  const handleGetLink = () => {
+    const url = `${window.location.origin}/files/${file.id}/view/`;
+    setFileUrl(url);
+    return url;
   };
 
   const handleCopyLink = () => {
-    if (downloadLink) {
-      navigator.clipboard.writeText(downloadLink)
-        .then(() => toast.success('Link copied to clipboard!', {
-          autoClose: 2000,
-          hideProgressBar: true,
-        }))
-        .catch(() => toast.error('Error when copying the link', {
-          autoClose: 2000,
-          hideProgressBar: true,
-        }));
-    } else {
-      toast.warning('The link has not been generated yet. First, click on "Get Link".', {
-        autoClose: 3000,
+    const urlToCopy = fileUrl || handleGetLink();
+    navigator.clipboard.writeText(urlToCopy)
+      .then(() => toast.success('Link copied to clipboard', {
+        autoClose: 2000,
         hideProgressBar: true,
-      });
-    }
+      }))
+      .catch(() => toast.error('Failed to copy link', {
+        autoClose: 2000,
+        hideProgressBar: true,
+      }));
+  };
+
+  const handleDownload = () => {
+    window.open(`${window.location.origin}/files/${file.id}/download/`, '_blank');
   };
 
   return (
     <div className="file-item">
-      <span className="file-item-name" title={file.name}>
-        {file.name}
-      </span>
-
-      <p className="file-comment">Comment: {file.comment || 'No comment'}</p>
+      <div className="file-info">
+        <span className="file-name" title={file.name}>
+          {file.name}
+        </span>
+        <p className="file-comment">Comment: {file.comment || 'No comment'}</p>
+      </div>
 
       <div className="file-item-actions">
-        <button onClick={() => onCopyLink(file.id)} className="get-link-button">
-          Get a link
+        <button onClick={handleGetLink} className="action-button">
+          Get Link
         </button>
-
-        <button onClick={handleCopyLink} className="copy-link-button">
-          Copy the link
+        <button onClick={handleCopyLink} className="action-button">
+          Copy Link
         </button>
-
-        {downloadLink && (
-          <a href={downloadLink} target="_blank" rel="noopener noreferrer" className="download-link">
-            Download
-          </a>
-        )}
-
-        <button onClick={() => setIsEditing(true)} className="config-button">
-          Config
+        <button onClick={handleDownload} className="action-button">
+          Download
         </button>
-
-        <button onClick={handleDeleteClick} className="delete-button">
+        <button 
+          onClick={() => setIsEditing(true)} 
+          className="action-button"
+        >
+          Edit
+        </button>
+        <button 
+          onClick={() => setIsModalOpen(true)} 
+          className="action-button delete-button"
+        >
           Delete
         </button>
       </div>
@@ -82,7 +96,7 @@ const FileItem = ({ file, onCopyLink, downloadLink, onDelete, onFileUpdate }) =>
       <ConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onConfirm={handleConfirmDelete}
+        onConfirm={handleDelete}
         title="Confirm Deletion"
         message={`Are you sure you want to delete ${file.name}?`}
       />
